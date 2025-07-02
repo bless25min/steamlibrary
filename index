@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steam Library Manager</title>
+    <script>
+        // 重定向到React應用
+        window.location.href = './build/index.html';
+    </script>
+</head>
+<body>
+    <div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">
+        <h1>Loading Steam Library Manager...</h1>
+        <p>正在載入應用程式...</p>
+        <p>如果沒有自動跳轉，請<a href="./build/index.html">點擊這裡</a></p>
+    </div>
+</body>
+</html>
