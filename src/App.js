@@ -138,17 +138,15 @@ function App() {
     }
   };
 
-  // GitHub 登入
+  // GitHub 登入 (修改後的版本)
   const signInWithGitHub = async () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: {
-          redirectTo: `${window.location.origin}/steamlibrary`
-        }
+        provider: 'github'
       });
       if (error) throw error;
     } catch (error) {
+      console.error('登入錯誤:', error);
       alert('登入失敗: ' + error.message);
     }
   };
