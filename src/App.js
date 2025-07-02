@@ -106,8 +106,8 @@ function App() {
         setWishlist(wishData);
       }
 
-    } catch (error) {
-      console.error('載入用戶資料失敗:', error);
+    } catch (err) {
+      console.error('載入用戶資料失敗:', err);
     }
   };
 
@@ -115,7 +115,7 @@ function App() {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
+        const { data } = await supabase.auth.getSession();
         
         if (data?.session) {
           setUser(data.session.user);
@@ -126,8 +126,8 @@ function App() {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         }
-      } catch (error) {
-        console.error('檢查用戶狀態失敗:', error);
+      } catch (err) {
+        console.error('檢查用戶狀態失敗:', err);
       }
     };
     
@@ -160,9 +160,9 @@ function App() {
         provider: 'github'
       });
       if (error) throw error;
-    } catch (error) {
-      console.error('登入錯誤:', error);
-      alert('登入失敗: ' + error.message);
+    } catch (err) {
+      console.error('登入錯誤:', err);
+      alert('登入失敗: ' + err.message);
     }
   };
 
@@ -171,8 +171,8 @@ function App() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-    } catch (error) {
-      alert('登出失敗: ' + error.message);
+    } catch (err) {
+      alert('登出失敗: ' + err.message);
     }
   };
 
@@ -191,8 +191,8 @@ function App() {
 
       if (error) throw error;
       alert('Steam設定已儲存！');
-    } catch (error) {
-      alert('儲存失敗: ' + error.message);
+    } catch (err) {
+      alert('儲存失敗: ' + err.message);
     }
   };
 
@@ -227,9 +227,9 @@ function App() {
       setLastSync(new Date());
       setSyncStatus('同步成功');
       
-    } catch (error) {
+    } catch (err) {
       setSyncStatus('同步失敗');
-      alert('同步失敗: ' + error.message);
+      alert('同步失敗: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -259,8 +259,8 @@ function App() {
       setNewWish({ name: '', reason: '' });
       setShowWishForm(false);
       
-    } catch (error) {
-      alert('新增許願失敗: ' + error.message);
+    } catch (err) {
+      alert('新增許願失敗: ' + err.message);
     }
   };
 
