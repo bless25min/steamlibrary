@@ -76,8 +76,8 @@ const createMockSupabase = () => {
       avatar_url: 'https://cdn.discordapp.com/avatars/123456789/avatar1.png',
       steam_id: '76561198123456789',
       steam_profile_url: 'https://steamcommunity.com/id/gamerpro2024/',
-      game_count: 156,
-      total_playtime: 2847,
+      game_count: 7,
+      total_playtime: 234,
       created_at: '2024-01-15'
     },
     {
@@ -87,8 +87,8 @@ const createMockSupabase = () => {
       avatar_url: 'https://cdn.discordapp.com/avatars/987654321/avatar2.png',
       steam_id: '76561198987654321',
       steam_profile_url: 'https://steamcommunity.com/id/steammaster/',
-      game_count: 89,
-      total_playtime: 1456,
+      game_count: 5,
+      total_playtime: 156,
       created_at: '2024-02-01'
     }
   ];
@@ -99,23 +99,34 @@ const createMockSupabase = () => {
       steam_app_id: '730',
       name: 'Counter-Strike 2',
       header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg',
-      owners: ['GamerPro2024', 'SteamMaster'],
-      playtime: { 'GamerPro2024': 1247, 'SteamMaster': 856 }
+      user_games: [
+        { playtime_forever: 7440, user: { username: 'GamerPro2024' } },
+        { playtime_forever: 5136, user: { username: 'SteamMaster' } }
+      ]
     },
     {
       id: '2',
       steam_app_id: '1086940',
       name: 'Baldur\'s Gate 3',
       header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1086940/header.jpg',
-      owners: ['GamerPro2024'],
-      playtime: { 'GamerPro2024': 187 }
+      user_games: [
+        { playtime_forever: 11220, user: { username: 'GamerPro2024' } }
+      ]
+    },
+    {
+      id: '3',
+      steam_app_id: '1245620',
+      name: 'ELDEN RING',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1245620/header.jpg',
+      user_games: [
+        { playtime_forever: 20700, user: { username: 'SteamMaster' } }
+      ]
     }
   ];
 
   return {
     auth: {
       signInWithOAuth: async (config) => {
-        // 模擬 Discord OAuth 登入
         return new Promise((resolve) => {
           setTimeout(() => {
             const mockUser = {
@@ -133,7 +144,6 @@ const createMockSupabase = () => {
       signOut: async () => ({ error: null }),
       getUser: async () => ({ data: { user: null }, error: null }),
       onAuthStateChange: (callback) => {
-        // 模擬認證狀態變化
         return { data: { subscription: {} } };
       }
     },
@@ -146,6 +156,24 @@ const createMockSupabase = () => {
               return { data: user || null, error: null };
             }
             return { data: null, error: null };
+          },
+          order: (orderColumn, options) => ({
+            then: async (callback) => {
+              if (table === 'users') {
+                return callback({ data: mockUsers, error: null });
+              }
+              return callback({ data: [], error: null });
+            }
+          })
+        }),
+        order: (orderColumn, options) => ({
+          then: async (callback) => {
+            if (table === 'users') {
+              return callback({ data: mockUsers, error: null });
+            } else if (table === 'games') {
+              return callback({ data: mockGames, error: null });
+            }
+            return callback({ data: [], error: null });
           }
         }),
         then: async (callback) => {
@@ -184,6 +212,25 @@ const createMockSupabase = () => {
             }
           })
         })
+      }),
+      upsert: (data, options) => ({
+        select: () => ({
+          single: async () => {
+            // 模擬 upsert 操作
+            if (table === 'games') {
+              const newData = { ...data, id: 'game_' + Date.now() };
+              return { data: newData, error: null };
+            } else if (table === 'user_games') {
+              const newData = { ...data, id: 'user_game_' + Date.now() };
+              return { data: newData, error: null };
+            }
+            return { data: data, error: null };
+          }
+        }),
+        // 對於 user_games 表不需要 select
+        then: async () => {
+          return { data: null, error: null };
+        }
       })
     })
   };
@@ -204,75 +251,8 @@ try {
       // import { createClient } from '@supabase/supabase-js'
       // supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey)
       
-      // 創建增強的模擬客戶端，支持 RPC 調用
-      const mockSupabase = createMockSupabase();
-      
-      // 添加 RPC 支持
-      mockSupabase.rpc = async (functionName, params) => {
-        console.log('🔧 調用數據庫函數:', functionName, params);
-        
-        if (functionName === 'resolve_steam_vanity') {
-          // 模擬解析 Steam 自訂 URL
-          return {
-            data: '76561198' + Math.floor(Math.random() * 1000000000),
-            error: null
-          };
-        }
-        
-        if (functionName === 'update_user_steam_info') {
-          // 模擬更新用戶 Steam 資料
-          const mockUser = {
-            id: 'user_' + Date.now(),
-            discord_id: params.user_discord_id,
-            username: 'TestUser',
-            steam_id: params.steam_id_param,
-            steam_profile_url: params.steam_url_param,
-            game_count: 5,
-            total_playtime: 150,
-            updated_at: new Date().toISOString()
-          };
-          
-          return {
-            data: {
-              success: true,
-              user: mockUser,
-              games_synced: 5,
-              total_playtime: 150
-            },
-            error: null
-          };
-        }
-        
-        if (functionName === 'get_user_games_with_owners') {
-          // 模擬獲取遊戲數據
-          return {
-            data: [
-              {
-                id: '1',
-                steam_app_id: '730',
-                name: 'Counter-Strike 2',
-                header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg',
-                owners: ['TestUser', 'GamerPro2024'],
-                playtime: { 'TestUser': 75, 'GamerPro2024': 120 }
-              },
-              {
-                id: '2',
-                steam_app_id: '1086940',
-                name: 'Baldur\'s Gate 3',
-                header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1086940/header.jpg',
-                owners: ['TestUser'],
-                playtime: { 'TestUser': 45 }
-              }
-            ],
-            error: null
-          };
-        }
-        
-        return { data: null, error: { message: '未知的函數調用' } };
-      };
-      
-      supabase = mockSupabase;
-      console.log('🧪 使用增強的模擬 Supabase 客戶端');
+      supabase = createMockSupabase();
+      console.log('🧪 使用模擬 Supabase 客戶端');
       console.log('📋 配置已準備好，可以在真實環境中使用！');
       console.log('🔗 Supabase URL:', SUPABASE_CONFIG.url);
     }
@@ -306,37 +286,37 @@ const SteamAPI = {
     return null;
   },
 
-  // 通過安全的數據庫函數解析自訂ID為Steam ID
+  // 解析自訂ID為Steam ID（簡化版）
   resolveVanityUrl: async (vanityName) => {
-    try {
-      const { data, error } = await supabase.rpc('resolve_steam_vanity', {
-        vanity_name: vanityName
-      });
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('解析Steam自訂URL失敗:', error);
-      // 備用：生成模擬Steam ID
-      return '76561198' + Math.floor(Math.random() * 1000000000);
-    }
+    // 生成模擬Steam ID
+    return '76561198' + Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
   },
 
-  // 通過安全的數據庫函數更新用戶Steam資料
-  updateUserSteamInfo: async (discordId, steamId, steamUrl) => {
-    try {
-      const { data, error } = await supabase.rpc('update_user_steam_info', {
-        user_discord_id: discordId,
-        steam_id_param: steamId,
-        steam_url_param: steamUrl
-      });
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('更新用戶Steam資料失敗:', error);
-      throw error;
-    }
+  // 生成模擬遊戲數據
+  generateMockGames: () => {
+    const baseGames = [
+      { appid: 730, name: 'Counter-Strike 2' },
+      { appid: 1086940, name: 'Baldur\'s Gate 3' },
+      { appid: 1245620, name: 'ELDEN RING' },
+      { appid: 570, name: 'Dota 2' },
+      { appid: 813780, name: 'Age of Empires IV' },
+      { appid: 271590, name: 'Grand Theft Auto V' },
+      { appid: 292030, name: 'The Witcher 3: Wild Hunt' },
+      { appid: 582010, name: 'Monster Hunter: World' },
+      { appid: 431960, name: 'Wallpaper Engine' }
+    ];
+
+    // 隨機選擇5-8個遊戲
+    const selectedCount = Math.floor(Math.random() * 4) + 5;
+    const selectedGames = [...baseGames]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, selectedCount);
+
+    return selectedGames.map(game => ({
+      ...game,
+      playtime_forever: Math.floor(Math.random() * 2000) + 50,
+      header_image: `https://cdn.akamai.steamstatic.com/steam/apps/${game.appid}/header.jpg`
+    }));
   }
 };
 
@@ -377,7 +357,7 @@ function App() {
 
   // 檢查配置
   const checkConfig = () => {
-    // 所有配置都已完成
+    // 配置已完成，無需檢查
     setConfigError('');
   };
 
@@ -455,17 +435,41 @@ function App() {
       if (usersError) throw usersError;
       if (usersData) setUsers(usersData);
 
-      // 載入遊戲數據（使用新的安全函數）
-      const { data: gamesData, error: gamesError } = await supabase.rpc('get_user_games_with_owners');
+      // 載入遊戲數據（簡化版本）
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('games')
+        .select(`
+          *,
+          user_games (
+            playtime_forever,
+            user:users (username)
+          )
+        `);
       
       if (gamesError) throw gamesError;
+      
       if (gamesData) {
         // 轉換數據格式以符合前端期望
-        const formattedGames = gamesData.map(game => ({
-          ...game,
-          owners: game.owners || [],
-          playtime: game.playtime || {}
-        }));
+        const formattedGames = gamesData.map(game => {
+          const owners = game.user_games?.map(ug => ug.user?.username).filter(Boolean) || [];
+          const playtime = {};
+          
+          game.user_games?.forEach(ug => {
+            if (ug.user?.username && ug.playtime_forever) {
+              playtime[ug.user.username] = Math.round(ug.playtime_forever / 60);
+            }
+          });
+
+          return {
+            id: game.id,
+            steam_app_id: game.steam_app_id,
+            name: game.name,
+            header_image: game.header_image,
+            owners: owners,
+            playtime: playtime
+          };
+        });
+        
         setGames(formattedGames);
       }
     } catch (error) {
@@ -535,25 +539,67 @@ function App() {
 
       setSyncStatus('同步遊戲庫中...');
       
-      // 使用安全的數據庫函數更新用戶Steam資料
-      const result = await SteamAPI.updateUserSteamInfo(
-        user.discord_id,
-        steamId,
-        steamUrl
-      );
+      // 生成模擬遊戲數據
+      const mockGames = SteamAPI.generateMockGames();
+      const totalPlaytime = Math.round(mockGames.reduce((total, game) => total + game.playtime_forever, 0) / 60);
 
-      if (!result.success) {
-        throw new Error(result.error || '同步失敗');
+      // 更新用戶Steam資料
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('users')
+        .update({
+          steam_id: steamId,
+          steam_profile_url: steamUrl,
+          game_count: mockGames.length,
+          total_playtime: totalPlaytime
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      setSyncStatus('儲存遊戲資料中...');
+
+      // 插入遊戲到遊戲表
+      for (const game of mockGames) {
+        // 先插入遊戲（如果不存在）
+        const { data: gameData, error: gameError } = await supabase
+          .from('games')
+          .upsert({
+            steam_app_id: game.appid.toString(),
+            name: game.name,
+            header_image: game.header_image
+          }, {
+            onConflict: 'steam_app_id'
+          })
+          .select()
+          .single();
+
+        if (gameError) {
+          console.log(`插入遊戲 ${game.name} 失敗:`, gameError);
+          continue;
+        }
+
+        // 建立用戶遊戲關聯
+        await supabase
+          .from('user_games')
+          .upsert({
+            user_id: updatedUser.id,
+            game_id: gameData.id,
+            playtime_forever: game.playtime_forever
+          }, {
+            onConflict: 'user_id,game_id'
+          });
       }
 
       // 更新本地用戶狀態
-      setUser(result.user);
+      setUser(updatedUser);
       setSyncStatus('同步完成！');
       
       // 重新載入數據
       await loadData();
       
-      alert(`Steam資料同步成功！\n遊戲數量: ${result.games_synced}\n總遊戲時間: ${result.total_playtime} 小時`);
+      alert(`Steam資料同步成功！\n遊戲數量: ${mockGames.length}\n總遊戲時間: ${totalPlaytime} 小時`);
       
       setShowSteamForm(false);
       setSteamUrl('');
