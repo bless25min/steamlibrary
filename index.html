@@ -4,11 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Steam 遊戲庫共享平台</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- React 和相關依賴 -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Supabase 客戶端 -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 自定義樣式 -->
     <style>
         .line-clamp-2 {
             overflow: hidden;
@@ -16,10 +24,847 @@
             -webkit-box-orient: vertical;
             -webkit-line-clamp: 2;
         }
+        
+        /* 確保深色背景 */
+        body {
+            background-color: #111827;
+            color: white;
+        }
+        
+        /* 載入動畫 */
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* 滾動條樣式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #6b7280;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
-    <script type="text/babel" src="script.js"></script>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 圖示組件
+        const Icons = {
+          Discord: () => (
+            React.createElement('svg', { className: "w-5 h-5", viewBox: "0 0 24 24", fill: "currentColor" },
+              React.createElement('path', { d: "M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z" })
+            )
+          ),
+          Steam: () => (
+            React.createElement('svg', { className: "w-5 h-5", viewBox: "0 0 24 24", fill: "currentColor" },
+              React.createElement('path', { d: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-8h2v6h-2v-6zm0-4h2v2h-2V8z" })
+            )
+          ),
+          Search: () => (
+            React.createElement('svg', { className: "w-5 h-5", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" })
+            )
+          ),
+          Users: () => (
+            React.createElement('svg', { className: "w-5 h-5", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" })
+            )
+          ),
+          GamepadIcon: () => (
+            React.createElement('svg', { className: "w-5 h-5", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" })
+            )
+          ),
+          RefreshCw: ({ className = "w-5 h-5" }) => (
+            React.createElement('svg', { className: className, fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" })
+            )
+          ),
+          ExternalLink: () => (
+            React.createElement('svg', { className: "w-4 h-4", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" })
+            )
+          ),
+          LogOut: () => (
+            React.createElement('svg', { className: "w-4 h-4", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" })
+            )
+          ),
+          Check: () => (
+            React.createElement('svg', { className: "w-4 h-4", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 13l4 4L19 7" })
+            )
+          ),
+          Crown: () => (
+            React.createElement('svg', { className: "w-4 h-4", fill: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { d: "M12 6L9 9l3-8 3 8-3-3zM6 9l-3 8h18l-3-8-6 4-6-4z" })
+            )
+          ),
+          X: () => (
+            React.createElement('svg', { className: "w-4 h-4", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M6 18L18 6M6 6l12 12" })
+            )
+          ),
+          AlertTriangle: () => (
+            React.createElement('svg', { className: "w-5 h-5", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5l-6.928-12c-.77-.833-2.494-.833-3.464 0l-6.928 12c-.77.833.192 2.5 1.732 2.5z" })
+            )
+          ),
+          Settings: () => (
+            React.createElement('svg', { className: "w-5 h-5", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" },
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" }),
+              React.createElement('path', { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z" })
+            )
+          )
+        };
+
+        // Supabase 配置
+        const SUPABASE_CONFIG = {
+          url: 'https://lwbrqtevzhfkwbwbcdtz.supabase.co',
+          anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3YnJxdGV2emhma3did2JjZHR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NjcxMjYsImV4cCI6MjA2NzA0MzEyNn0.4s16bos5EEhSuUg-K1Paf8B5UXyo-Ca8reTFZ03VVT8',
+          steamApiKey: '274411C2579E7E7CB7482A4BDEAB1077'
+        };
+
+        // Steam API 工具函數
+        const SteamAPI = {
+          parseSteamUrl: (url) => {
+            const patterns = [
+              { pattern: /steamcommunity\.com\/id\/([^/]+)/, type: 'custom_id' },
+              { pattern: /steamcommunity\.com\/profiles\/(\d{17})/, type: 'steam_id' }
+            ];
+            
+            for (const { pattern, type } of patterns) {
+              const match = url.match(pattern);
+              if (match) {
+                return {
+                  identifier: match[1],
+                  type: type,
+                  steamId: type === 'steam_id' ? match[1] : null
+                };
+              }
+            }
+            return null;
+          },
+
+          resolveVanityUrl: async (vanityName) => {
+            return '76561198' + Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
+          },
+
+          getOwnedGames: async (steamId) => {
+            const baseGames = [
+              { appid: 730, name: 'Counter-Strike 2' },
+              { appid: 1086940, name: 'Baldur\'s Gate 3' },
+              { appid: 1245620, name: 'ELDEN RING' },
+              { appid: 570, name: 'Dota 2' },
+              { appid: 813780, name: 'Age of Empires IV' },
+              { appid: 271590, name: 'Grand Theft Auto V' },
+              { appid: 292030, name: 'The Witcher 3: Wild Hunt' },
+              { appid: 582010, name: 'Monster Hunter: World' },
+              { appid: 431960, name: 'Wallpaper Engine' },
+              { appid: 1174180, name: 'Red Dead Redemption 2' },
+              { appid: 1938090, name: 'Call of Duty®: Modern Warfare® II' }
+            ];
+
+            const selectedCount = Math.floor(Math.random() * 4) + 5;
+            const selectedGames = [...baseGames]
+              .sort(() => 0.5 - Math.random())
+              .slice(0, selectedCount);
+
+            return selectedGames.map(game => ({
+              ...game,
+              playtime_forever: Math.floor(Math.random() * 2000) + 50,
+              header_image: `https://cdn.akamai.steamstatic.com/steam/apps/${game.appid}/header.jpg`
+            }));
+          }
+        };
+
+        // 初始化 Supabase
+        let supabase;
+        try {
+          supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+          console.log('✅ Supabase 客戶端初始化成功');
+        } catch (error) {
+          console.error('❌ Supabase 初始化失敗:', error);
+        }
+
+        // 主應用組件
+        function App() {
+          const [user, setUser] = useState(null);
+          const [loading, setLoading] = useState(true);
+          const [authLoading, setAuthLoading] = useState(false);
+          const [activeTab, setActiveTab] = useState('discover');
+          
+          const [steamUrl, setSteamUrl] = useState('');
+          const [showSteamForm, setShowSteamForm] = useState(false);
+          const [syncStatus, setSyncStatus] = useState('');
+          const [syncLoading, setSyncLoading] = useState(false);
+          
+          const [searchTerm, setSearchTerm] = useState('');
+          const [filterBy, setFilterBy] = useState('all');
+          const [sortBy, setSortBy] = useState('name');
+          
+          const [users, setUsers] = useState([]);
+          const [games, setGames] = useState([]);
+
+          // 初始化
+          useEffect(() => {
+            const initializeApp = async () => {
+              try {
+                if (supabase) {
+                  await initializeAuth();
+                  await loadData();
+                } else {
+                  console.log('使用模擬數據');
+                  setUsers([
+                    {
+                      id: 'shared_1',
+                      username: '共享帳號 #1',
+                      avatar_url: 'https://ui-avatars.com/api/?name=S1&background=3b82f6&color=fff',
+                      steam_profile_url: 'https://steamcommunity.com/profiles/76561199470483407/',
+                      game_count: 12,
+                      total_playtime: 456,
+                      is_shared: true
+                    }
+                  ]);
+                  setGames([
+                    {
+                      id: 'game_1',
+                      steam_app_id: '730',
+                      name: 'Counter-Strike 2',
+                      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg',
+                      owners: ['共享帳號 #1'],
+                      playtime: { '共享帳號 #1': 146 }
+                    }
+                  ]);
+                }
+              } catch (error) {
+                console.error('初始化失敗:', error);
+              } finally {
+                setLoading(false);
+              }
+            };
+            
+            initializeApp();
+          }, []);
+
+          const initializeAuth = async () => {
+            if (!supabase) return;
+            
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                await loadUserData(user);
+              }
+            } catch (error) {
+              console.error('認證初始化失敗:', error);
+            }
+
+            supabase.auth.onAuthStateChange(async (event, session) => {
+              if (event === 'SIGNED_IN' && session?.user) {
+                await loadUserData(session.user);
+                await loadData();
+              } else if (event === 'SIGNED_OUT') {
+                setUser(null);
+                setActiveTab('discover');
+                await loadData();
+              }
+            });
+          };
+
+          const loadUserData = async (authUser) => {
+            if (!supabase) return;
+            
+            try {
+              const { data: userData, error } = await supabase
+                .from('users')
+                .select('*')
+                .eq('discord_id', authUser.user_metadata.provider_id)
+                .single();
+
+              if (userData) {
+                setUser(userData);
+              } else {
+                const newUser = {
+                  discord_id: authUser.user_metadata.provider_id,
+                  username: authUser.user_metadata.full_name || authUser.user_metadata.preferred_username,
+                  avatar_url: authUser.user_metadata.avatar_url
+                };
+
+                const { data: createdUser, error: createError } = await supabase
+                  .from('users')
+                  .insert(newUser)
+                  .select()
+                  .single();
+
+                if (!createError) {
+                  setUser(createdUser);
+                  setShowSteamForm(true);
+                }
+              }
+            } catch (error) {
+              console.error('載入用戶數據失敗:', error);
+            }
+          };
+
+          const loadData = async () => {
+            if (!supabase) return;
+            
+            try {
+              const { data: usersData } = await supabase
+                .from('users')
+                .select('*')
+                .order('created_at', { ascending: false });
+              
+              if (usersData) {
+                setUsers(user ? usersData : usersData.filter(u => u.is_shared));
+              }
+
+              const { data: gamesData } = await supabase
+                .from('games')
+                .select(`
+                  *,
+                  user_games (
+                    playtime_forever,
+                    user:users (username)
+                  )
+                `);
+              
+              if (gamesData) {
+                const formattedGames = gamesData.map(game => {
+                  let owners = game.user_games?.map(ug => ug.user?.username).filter(Boolean) || [];
+                  const playtime = {};
+                  
+                  game.user_games?.forEach(ug => {
+                    if (ug.user?.username && ug.playtime_forever) {
+                      playtime[ug.user.username] = Math.round(ug.playtime_forever / 60);
+                    }
+                  });
+
+                  if (!user) {
+                    const sharedOwners = owners.filter(owner => owner.includes('共享帳號'));
+                    if (sharedOwners.length === 0) return null;
+                    owners = sharedOwners;
+                  }
+
+                  return {
+                    id: game.id,
+                    steam_app_id: game.steam_app_id,
+                    name: game.name,
+                    header_image: game.header_image,
+                    owners,
+                    playtime
+                  };
+                }).filter(Boolean);
+                
+                setGames(formattedGames);
+              }
+            } catch (error) {
+              console.error('載入數據失敗:', error);
+            }
+          };
+
+          const signInWithDiscord = async () => {
+            if (!supabase) return;
+            
+            setAuthLoading(true);
+            try {
+              const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'discord',
+                options: {
+                  redirectTo: window.location.origin
+                }
+              });
+              
+              if (error) throw error;
+            } catch (error) {
+              alert('登入失敗: ' + error.message);
+            } finally {
+              setAuthLoading(false);
+            }
+          };
+
+          const signOut = async () => {
+            if (!supabase) return;
+            
+            try {
+              await supabase.auth.signOut();
+            } catch (error) {
+              console.error('登出失敗:', error);
+            }
+          };
+
+          const saveSteamProfile = async () => {
+            if (!steamUrl || !supabase) return;
+
+            const parsedUrl = SteamAPI.parseSteamUrl(steamUrl);
+            if (!parsedUrl) {
+              alert('無效的Steam連結格式');
+              return;
+            }
+
+            setSyncLoading(true);
+            setSyncStatus('解析Steam資料中...');
+
+            try {
+              let steamId = parsedUrl.steamId;
+              
+              if (parsedUrl.type === 'custom_id') {
+                steamId = await SteamAPI.resolveVanityUrl(parsedUrl.identifier);
+              }
+
+              const games = await SteamAPI.getOwnedGames(steamId);
+              const totalPlaytime = Math.round(games.reduce((total, game) => total + game.playtime_forever, 0) / 60);
+
+              const { data: updatedUser } = await supabase
+                .from('users')
+                .update({
+                  steam_id: steamId,
+                  steam_profile_url: steamUrl,
+                  game_count: games.length,
+                  total_playtime: totalPlaytime
+                })
+                .eq('id', user.id)
+                .select()
+                .single();
+
+              if (updatedUser) {
+                setUser(updatedUser);
+                setSyncStatus('同步完成！');
+                await loadData();
+                alert(`Steam資料同步成功！\n遊戲數量: ${games.length}\n總遊戲時間: ${totalPlaytime} 小時`);
+                setShowSteamForm(false);
+                setSteamUrl('');
+              }
+            } catch (error) {
+              alert('同步失敗: ' + error.message);
+            } finally {
+              setSyncLoading(false);
+            }
+          };
+
+          const getFilteredGames = () => {
+            let filtered = games.filter(game => {
+              const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase());
+              
+              if (filterBy === 'all') return matchesSearch;
+              if (filterBy === 'popular') return matchesSearch && game.owners && game.owners.length >= 2;
+              if (filterBy === 'mine' && user) return matchesSearch && game.owners && game.owners.includes(user.username);
+              
+              return matchesSearch;
+            });
+
+            filtered.sort((a, b) => {
+              switch (sortBy) {
+                case 'name': return a.name.localeCompare(b.name);
+                case 'popularity': return (b.owners?.length || 0) - (a.owners?.length || 0);
+                case 'playtime':
+                  const aPlaytime = Math.max(...Object.values(a.playtime || { default: 0 }));
+                  const bPlaytime = Math.max(...Object.values(b.playtime || { default: 0 }));
+                  return bPlaytime - aPlaytime;
+                default: return 0;
+              }
+            });
+
+            return filtered;
+          };
+
+          const filteredGames = getFilteredGames();
+
+          if (loading) {
+            return React.createElement('div', { className: "min-h-screen bg-gray-900 text-white flex items-center justify-center" },
+              React.createElement('div', { className: "text-center" },
+                React.createElement('div', { className: "w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" }),
+                React.createElement('p', { className: "text-gray-400" }, '載入中...')
+              )
+            );
+          }
+
+          return React.createElement('div', { className: "min-h-screen bg-gray-900 text-white" },
+            // 頂部導航
+            React.createElement('div', { className: "bg-gray-800 border-b border-gray-700" },
+              React.createElement('div', { className: "max-w-7xl mx-auto px-4 py-4" },
+                React.createElement('div', { className: "flex items-center justify-between" },
+                  React.createElement('div', { className: "flex items-center space-x-4" },
+                    React.createElement('div', { className: "w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center" },
+                      React.createElement(Icons.Steam, { className: "w-6 h-6" })
+                    ),
+                    React.createElement('div', null,
+                      React.createElement('h1', { className: "text-xl font-bold" }, 'Steam 遊戲庫共享平台'),
+                      React.createElement('p', { className: "text-sm text-gray-400" }, 
+                        `群組遊戲庫 • ${users.length} 位玩家 • ${games.length} 款遊戲`
+                      )
+                    )
+                  ),
+                  React.createElement('div', { className: "flex items-center space-x-4" },
+                    user ? [
+                      React.createElement('div', { key: 'user-info', className: "flex items-center space-x-3" },
+                        React.createElement('img', { 
+                          src: user.avatar_url, 
+                          alt: user.username, 
+                          className: "w-8 h-8 rounded-full" 
+                        }),
+                        React.createElement('span', { className: "text-sm font-medium" }, user.username)
+                      ),
+                      React.createElement('button', { 
+                        key: 'logout',
+                        onClick: signOut,
+                        className: "text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition-colors"
+                      }, React.createElement(Icons.LogOut))
+                    ] : React.createElement('button', {
+                      onClick: signInWithDiscord,
+                      disabled: authLoading,
+                      className: `bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors ${authLoading ? 'opacity-50' : ''}`
+                    },
+                      React.createElement(Icons.Discord),
+                      React.createElement('span', { className: "text-sm" }, authLoading ? '登入中...' : 'Discord 登入')
+                    )
+                  )
+                )
+              )
+            ),
+
+            // 主要內容
+            React.createElement('div', { className: "max-w-7xl mx-auto px-4 py-6" },
+              // 標籤頁導航
+              React.createElement('div', { className: "flex space-x-1 mb-6 bg-gray-800 p-1 rounded-lg w-fit" },
+                React.createElement('button', {
+                  onClick: () => setActiveTab('discover'),
+                  className: `px-6 py-3 rounded-md transition-colors flex items-center space-x-2 ${activeTab === 'discover' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`
+                },
+                  React.createElement(Icons.GamepadIcon),
+                  React.createElement('span', null, '探索遊戲')
+                ),
+                React.createElement('button', {
+                  onClick: () => setActiveTab('users'),
+                  className: `px-6 py-3 rounded-md transition-colors flex items-center space-x-2 ${activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`
+                },
+                  React.createElement(Icons.Users),
+                  React.createElement('span', null, `玩家列表 (${users.length})`)
+                ),
+                user && React.createElement('button', {
+                  onClick: () => setActiveTab('profile'),
+                  className: `px-6 py-3 rounded-md transition-colors flex items-center space-x-2 ${activeTab === 'profile' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`
+                },
+                  React.createElement(Icons.Steam),
+                  React.createElement('span', null, '我的資料')
+                )
+              ),
+
+              // 遊戲探索頁面
+              activeTab === 'discover' && React.createElement('div', null,
+                React.createElement('div', { className: "bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700" },
+                  React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-4 gap-4" },
+                    React.createElement('div', { className: "relative md:col-span-2" },
+                      React.createElement(Icons.Search, { className: "absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" }),
+                      React.createElement('input', {
+                        type: "text",
+                        placeholder: "搜尋遊戲...",
+                        value: searchTerm,
+                        onChange: (e) => setSearchTerm(e.target.value),
+                        className: "w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      })
+                    ),
+                    React.createElement('select', {
+                      value: filterBy,
+                      onChange: (e) => setFilterBy(e.target.value),
+                      className: "bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
+                    },
+                      React.createElement('option', { value: "all" }, '所有遊戲'),
+                      React.createElement('option', { value: "popular" }, '熱門遊戲 (2+人擁有)'),
+                      user && React.createElement('option', { value: "mine" }, '我的遊戲')
+                    ),
+                    React.createElement('select', {
+                      value: sortBy,
+                      onChange: (e) => setSortBy(e.target.value),
+                      className: "bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
+                    },
+                      React.createElement('option', { value: "name" }, '按名稱排序'),
+                      React.createElement('option', { value: "popularity" }, '按受歡迎程度排序'),
+                      React.createElement('option', { value: "playtime" }, '按遊戲時間排序')
+                    )
+                  ),
+                  React.createElement('div', { className: "mt-4 text-sm text-gray-400" },
+                    `顯示 ${filteredGames.length} / ${games.length} 款遊戲`
+                  )
+                ),
+                
+                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" },
+                  filteredGames.map(game => 
+                    React.createElement('div', { 
+                      key: game.id, 
+                      className: "bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-gray-600 transition-colors" 
+                    },
+                      React.createElement('img', {
+                        src: game.header_image,
+                        alt: game.name,
+                        className: "w-full h-40 object-cover",
+                        onError: (e) => e.target.src = 'https://via.placeholder.com/460x215/374151/9CA3AF?text=Steam+Game'
+                      }),
+                      React.createElement('div', { className: "p-4" },
+                        React.createElement('div', { className: "flex items-start justify-between mb-3" },
+                          React.createElement('h3', { className: "text-lg font-semibold line-clamp-2" }, game.name),
+                          React.createElement('a', {
+                            href: `https://store.steampowered.com/app/${game.steam_app_id}/`,
+                            target: "_blank",
+                            rel: "noopener noreferrer",
+                            className: "text-blue-400 hover:text-blue-300 ml-2"
+                          }, React.createElement(Icons.ExternalLink))
+                        ),
+                        React.createElement('div', { className: "space-y-3" },
+                          React.createElement('div', { className: "flex items-center justify-between text-sm" },
+                            React.createElement('span', { className: "text-gray-400" }, '擁有者:'),
+                            React.createElement('span', { className: "text-gray-300" }, `${game.owners?.length || 0} 人`)
+                          ),
+                          game.owners && game.owners.length > 0 && React.createElement('div', null,
+                            React.createElement('div', { className: "text-sm text-gray-400 mb-2" }, '玩家:'),
+                            React.createElement('div', { className: "flex flex-wrap gap-1" },
+                              game.owners.map(owner =>
+                                React.createElement('span', { 
+                                  key: owner, 
+                                  className: "bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs" 
+                                }, owner)
+                              )
+                            )
+                          ),
+                          game.playtime && Object.keys(game.playtime).length > 0 && React.createElement('div', null,
+                            React.createElement('div', { className: "text-sm text-gray-400 mb-2" }, '遊戲時間:'),
+                            React.createElement('div', { className: "space-y-1" },
+                              Object.entries(game.playtime).map(([player, hours]) =>
+                                React.createElement('div', { 
+                                  key: player, 
+                                  className: "flex justify-between text-xs" 
+                                },
+                                  React.createElement('span', { className: "text-gray-300" }, `${player}:`),
+                                  React.createElement('span', { className: "text-gray-400" }, `${hours}小時`)
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                ),
+
+                filteredGames.length === 0 && React.createElement('div', { className: "text-center py-12" },
+                  React.createElement(Icons.GamepadIcon, { className: "w-16 h-16 text-gray-400 mx-auto mb-4" }),
+                  React.createElement('p', { className: "text-gray-400 text-lg" }, '沒有找到符合條件的遊戲')
+                )
+              ),
+
+              // 玩家列表頁面
+              activeTab === 'users' && React.createElement('div', null,
+                React.createElement('div', { className: "flex items-center justify-between mb-6" },
+                  React.createElement('h2', { className: "text-2xl font-bold" }, '社群玩家'),
+                  React.createElement('div', { className: "text-sm text-gray-400" }, `共 ${users.length} 位玩家加入平台`)
+                ),
+                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" },
+                  users.map(userData =>
+                    React.createElement('div', { 
+                      key: userData.id, 
+                      className: `rounded-lg p-6 border ${userData.is_shared ? 'bg-blue-900 border-blue-700' : 'bg-gray-800 border-gray-700'}` 
+                    },
+                      React.createElement('div', { className: "flex items-start space-x-4 mb-4" },
+                        React.createElement('div', { className: "relative" },
+                          React.createElement('img', {
+                            src: userData.avatar_url,
+                            alt: userData.username,
+                            className: "w-12 h-12 rounded-full"
+                          }),
+                          userData.is_shared && React.createElement('div', { className: "absolute -top-1 -right-1 bg-blue-500 rounded-full p-1" },
+                            React.createElement(Icons.Steam, { className: "w-3 h-3 text-white" })
+                          )
+                        ),
+                        React.createElement('div', { className: "flex-1" },
+                          React.createElement('div', { className: "flex items-center space-x-2" },
+                            React.createElement('h3', { className: "font-semibold" }, userData.username),
+                            userData.is_shared && React.createElement('span', { className: "bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs" }, '共享'),
+                            userData.id === user?.id && React.createElement('span', { className: "bg-green-600 text-green-100 px-2 py-1 rounded text-xs" }, '你')
+                          ),
+                          React.createElement('p', { className: "text-sm text-gray-400" },
+                            userData.is_shared ? '共享帳號' : `加入於 ${userData.created_at}`
+                          )
+                        )
+                      ),
+                      React.createElement('div', { className: "grid grid-cols-2 gap-4 mb-4" },
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-2xl font-bold text-blue-400" }, userData.game_count || 0),
+                          React.createElement('div', { className: "text-xs text-gray-400" }, '遊戲數量')
+                        ),
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-2xl font-bold text-purple-400" }, userData.total_playtime || 0),
+                          React.createElement('div', { className: "text-xs text-gray-400" }, '總遊戲時間')
+                        )
+                      ),
+                      userData.steam_profile_url && React.createElement('a', {
+                        href: userData.steam_profile_url,
+                        target: "_blank",
+                        rel: "noopener noreferrer",
+                        className: "w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
+                      },
+                        React.createElement(Icons.Steam),
+                        React.createElement('span', null, '查看Steam檔案'),
+                        React.createElement(Icons.ExternalLink)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              // 個人資料頁面
+              activeTab === 'profile' && user && React.createElement('div', null,
+                React.createElement('div', { className: "flex items-center justify-between mb-6" },
+                  React.createElement('h2', { className: "text-2xl font-bold" }, '我的資料'),
+                  !user.steam_id && React.createElement('button', {
+                    onClick: () => setShowSteamForm(true),
+                    className: "bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                  },
+                    React.createElement(Icons.Steam),
+                    React.createElement('span', null, '連結Steam帳號')
+                  )
+                ),
+                React.createElement('div', { className: "bg-gray-800 rounded-lg p-6 border border-gray-700 text-center" },
+                  React.createElement('img', {
+                    src: user.avatar_url,
+                    alt: user.username,
+                    className: "w-20 h-20 rounded-full mx-auto mb-4"
+                  }),
+                  React.createElement('h3', { className: "text-xl font-bold mb-2" }, user.username),
+                  React.createElement('p', { className: "text-gray-400 text-sm mb-4" }, 'Discord 用戶'),
+                  React.createElement('div', { className: "grid grid-cols-2 gap-4 mb-4" },
+                    React.createElement('div', { className: "text-center" },
+                      React.createElement('div', { className: "text-2xl font-bold text-blue-400" }, user.game_count || 0),
+                      React.createElement('div', { className: "text-xs text-gray-400" }, '遊戲數量')
+                    ),
+                    React.createElement('div', { className: "text-center" },
+                      React.createElement('div', { className: "text-2xl font-bold text-purple-400" }, user.total_playtime || 0),
+                      React.createElement('div', { className: "text-xs text-gray-400" }, '總遊戲時間')
+                    )
+                  ),
+                  user.steam_id ? React.createElement('div', { className: "space-y-2" },
+                    React.createElement('div', { className: "flex items-center justify-center space-x-2 text-green-400" },
+                      React.createElement(Icons.Check),
+                      React.createElement('span', { className: "text-sm" }, 'Steam 已連結')
+                    ),
+                    user.steam_profile_url && React.createElement('a', {
+                      href: user.steam_profile_url,
+                      target: "_blank",
+                      rel: "noopener noreferrer",
+                      className: "w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
+                    },
+                      React.createElement(Icons.Steam),
+                      React.createElement('span', null, '查看Steam檔案'),
+                      React.createElement(Icons.ExternalLink)
+                    ),
+                    React.createElement('button', {
+                      onClick: () => setShowSteamForm(true),
+                      className: "w-full bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
+                    },
+                      React.createElement(Icons.RefreshCw),
+                      React.createElement('span', null, '重新同步')
+                    )
+                  ) : React.createElement('button', {
+                    onClick: () => setShowSteamForm(true),
+                    className: "w-full bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors"
+                  },
+                    React.createElement(Icons.Steam),
+                    React.createElement('span', null, '連結Steam帳號')
+                  )
+                )
+              )
+            ),
+
+            // Steam 設定彈窗
+            showSteamForm && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" },
+              React.createElement('div', { className: "bg-gray-800 rounded-lg p-6 w-full max-w-md" },
+                React.createElement('div', { className: "flex items-center justify-between mb-4" },
+                  React.createElement('h3', { className: "text-xl font-bold" }, '連結 Steam 帳號'),
+                  React.createElement('button', {
+                    onClick: () => {
+                      setShowSteamForm(false);
+                      setSteamUrl('');
+                      setSyncStatus('');
+                    },
+                    className: "text-gray-400 hover:text-white"
+                  }, React.createElement(Icons.X))
+                ),
+                React.createElement('div', { className: "space-y-4" },
+                  React.createElement('div', null,
+                    React.createElement('label', { className: "block text-sm font-medium mb-2" }, 'Steam 個人頁面連結'),
+                    React.createElement('input', {
+                      type: "url",
+                      value: steamUrl,
+                      onChange: (e) => setSteamUrl(e.target.value),
+                      placeholder: "https://steamcommunity.com/id/你的ID/",
+                      className: "w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    }),
+                    React.createElement('div', { className: "mt-2 text-xs text-gray-400" },
+                      React.createElement('p', null, '支援格式：'),
+                      React.createElement('p', null, '• https://steamcommunity.com/id/你的自訂ID/'),
+                      React.createElement('p', null, '• https://steamcommunity.com/profiles/數字ID/')
+                    )
+                  ),
+                  syncStatus && React.createElement('div', { 
+                    className: `rounded-lg p-3 border ${
+                      syncStatus.includes('完成') ? 'bg-green-900 border-green-700' :
+                      syncStatus.includes('失敗') ? 'bg-red-900 border-red-700' :
+                      'bg-blue-900 border-blue-700'
+                    }`
+                  },
+                    React.createElement('p', { 
+                      className: `text-sm ${
+                        syncStatus.includes('完成') ? 'text-green-300' :
+                        syncStatus.includes('失敗') ? 'text-red-300' :
+                        'text-blue-300'
+                      }`
+                    }, syncStatus)
+                  ),
+                  React.createElement('div', { className: "flex space-x-3 pt-4" },
+                    React.createElement('button', {
+                      onClick: () => {
+                        setShowSteamForm(false);
+                        setSteamUrl('');
+                        setSyncStatus('');
+                      },
+                      disabled: syncLoading,
+                      className: "flex-1 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 py-3 rounded-lg transition-colors"
+                    }, '取消'),
+                    React.createElement('button', {
+                      onClick: saveSteamProfile,
+                      disabled: syncLoading || !steamUrl,
+                      className: "flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-3 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                    },
+                      syncLoading && React.createElement(Icons.RefreshCw, { className: "w-4 h-4 animate-spin" }),
+                      React.createElement('span', null, syncLoading ? '處理中...' : '連結並同步')
+                    )
+                  )
+                )
+              )
+            )
+          );
+        }
+
+        // 渲染應用
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
 </body>
 </html>
