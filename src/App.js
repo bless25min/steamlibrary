@@ -119,7 +119,6 @@ function App() {
   
   // UI狀態
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAccounts, setSelectedAccounts] = useState([]);
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
   const [minAccounts, setMinAccounts] = useState(1);
@@ -149,9 +148,17 @@ function App() {
     }
 
     if (savedUser) {
-      loadAllData();
+      // 直接在這裡載入數據，避免依賴問題
+      Promise.all([
+        loadSteamAccounts(),
+        loadGameLibrary(),
+        loadGameDetails(),
+        loadWishlist()
+      ]).catch(error => {
+        console.error('載入數據失敗:', error);
+      });
     }
-  }, []);
+  }, []); // 移除 loadAllData 依賴
 
   // 載入所有數據
   const loadAllData = async () => {
@@ -521,11 +528,9 @@ function App() {
   const filteredAndSortedGames = () => {
     let filtered = gameLibrary.filter(game => {
       const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesAccounts = selectedAccounts.length === 0 || 
-                             selectedAccounts.every(accId => game.accounts.includes(accId));
       const matchesMinAccounts = game.accounts.length >= minAccounts;
       
-      return matchesSearch && matchesAccounts && matchesMinAccounts;
+      return matchesSearch && matchesMinAccounts;
     });
 
     filtered.sort((a, b) => {
