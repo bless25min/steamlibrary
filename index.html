@@ -212,6 +212,12 @@
                     <button id="quickResetBtn" class="bg-gray-600 hover:bg-gray-700 px-3 py-1 rounded-full text-sm transition-colors">
                         重置篩選
                     </button>
+                    <button id="clearCacheBtn" class="bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded-full text-sm transition-colors">
+                        清除緩存
+                    </button>
+                    <button id="reloadBtn" class="bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded-full text-sm transition-colors">
+                        重新載入
+                    </button>
                     <button id="exportBtn" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-full text-sm transition-colors">
                         導出清單
                     </button>
@@ -312,6 +318,11 @@
         let currentFilter = 'all';
         let currentSort = 'commonality';
         let supabase = null;
+        
+        // 新增：API緩存和狀態管理
+        let gameDataCache = new Map(); // 緩存用戶遊戲數據
+        let isLoadingGames = false; // 防止重複載入
+        let authStateInitialized = false; // 防止重複認證初始化
 
         // 共享帳號
         const SHARED_ACCOUNTS = [
@@ -440,6 +451,8 @@
                 const quickCommonBtn = document.getElementById('quickCommonBtn');
                 const quickPopularBtn = document.getElementById('quickPopularBtn');
                 const quickResetBtn = document.getElementById('quickResetBtn');
+                const clearCacheBtn = document.getElementById('clearCacheBtn');
+                const reloadBtn = document.getElementById('reloadBtn');
                 const exportBtn = document.getElementById('exportBtn');
 
                 if (quickCommonBtn) {
@@ -450,6 +463,12 @@
                 }
                 if (quickResetBtn) {
                     quickResetBtn.addEventListener('click', resetAllFilters);
+                }
+                if (clearCacheBtn) {
+                    clearCacheBtn.addEventListener('click', clearGameDataCache);
+                }
+                if (reloadBtn) {
+                    reloadBtn.addEventListener('click', () => reloadGameData(true));
                 }
                 if (exportBtn) {
                     exportBtn.addEventListener('click', exportGameList);
@@ -468,20 +487,34 @@
                 // 鍵盤快捷鍵
                 document.addEventListener('keydown', handleKeyboardShortcuts);
 
-                // Supabase 認證狀態監聽
+                // Supabase 認證狀態監聽 - 防止重複觸發
                 if (supabase) {
                     supabase.auth.onAuthStateChange((event, session) => {
                         console.log('認證狀態變化:', event);
+                        
+                        // 防止重複初始化
+                        if (event === 'INITIAL_SESSION' && authStateInitialized) {
+                            return;
+                        }
+                        
                         if (event === 'SIGNED_IN') {
-                            currentUser = session.user;
-                            updateAuthInterface(true);
-                            loadUsers();
-                            showNotification('登入成功！', 'success');
+                            if (!authStateInitialized || !currentUser) {
+                                currentUser = session.user;
+                                updateAuthInterface(true);
+                                loadUsers();
+                                showNotification('登入成功！', 'success');
+                                authStateInitialized = true;
+                            }
                         } else if (event === 'SIGNED_OUT') {
                             currentUser = null;
+                            authStateInitialized = false;
                             updateAuthInterface(false);
                             selectedUsers = [...SHARED_ACCOUNTS];
+                            // 清除緩存
+                            gameDataCache.clear();
                             loadUsers();
+                        } else if (event === 'INITIAL_SESSION') {
+                            authStateInitialized = true;
                         }
                     });
                 }
@@ -705,7 +738,7 @@
             return card;
         }
 
-        // 切換用戶選擇
+        // 切換用戶選擇 - 防止重複載入
         function toggleUser(user) {
             const index = selectedUsers.findIndex(u => u.id === user.id);
             if (index === -1) {
@@ -715,24 +748,53 @@
             }
             
             updateUserInterface();
-            loadGames();
+            
+            // 使用防抖避免頻繁載入
+            clearTimeout(window.loadGamesTimeout);
+            window.loadGamesTimeout = setTimeout(() => {
+                loadGames();
+            }, 300);
         }
 
-        // 全選用戶
+        // 全選用戶 - 防止重複載入
         function selectAllUsers() {
             selectedUsers = [...allUsers];
             updateUserInterface();
-            loadGames();
+            
+            clearTimeout(window.loadGamesTimeout);
+            window.loadGamesTimeout = setTimeout(() => {
+                loadGames();
+            }, 300);
         }
 
-        // 取消全選
+        // 取消全選 - 防止重複載入
         function deselectAllUsers() {
             selectedUsers = [];
             updateUserInterface();
-            loadGames();
+            
+            clearTimeout(window.loadGamesTimeout);
+            window.loadGamesTimeout = setTimeout(() => {
+                loadGames();
+            }, 300);
         }
 
-        // 載入遊戲
+        // 清除緩存功能
+        function clearGameDataCache() {
+            gameDataCache.clear();
+            showNotification('已清除遊戲數據緩存', 'success');
+        }
+
+        // 手動重新載入遊戲數據
+        async function reloadGameData(forceRefresh = false) {
+            if (forceRefresh) {
+                gameDataCache.clear();
+            }
+            
+            isLoadingGames = false; // 重置載入狀態
+            await loadGames();
+        }
+
+        // 載入遊戲 - 添加緩存和重複載入防護
         async function loadGames() {
             if (selectedUsers.length === 0) {
                 allGames = [];
@@ -741,6 +803,13 @@
                 return;
             }
             
+            // 防止重複載入
+            if (isLoadingGames) {
+                console.log('遊戲載入中，跳過重複請求');
+                return;
+            }
+            
+            isLoadingGames = true;
             showLoading(true);
             
             try {
@@ -752,7 +821,29 @@
                     const user = selectedUsers[i];
                     try {
                         console.log(`載入用戶 ${user.name} 的遊戲...`);
-                        const games = await fetchUserGames(user.id);
+                        let games;
+                        
+                        // 檢查緩存
+                        if (gameDataCache.has(user.id)) {
+                            console.log(`使用用戶 ${user.name} 的緩存數據`);
+                            games = gameDataCache.get(user.id);
+                        } else {
+                            // 從資料庫載入
+                            games = await loadUserGamesFromDB(user.id);
+                            
+                            // 如果資料庫沒有數據，從API載入
+                            if (!games || games.length === 0) {
+                                games = await fetchUserGames(user.id);
+                                // 保存到資料庫
+                                if (games.length > 0) {
+                                    await saveUserGamesToDB(user.id, games);
+                                }
+                            }
+                            
+                            // 緩存數據
+                            gameDataCache.set(user.id, games);
+                        }
+                        
                         allUserGames.push(games);
                     } catch (error) {
                         console.error(`載入用戶 ${user.name} 失敗:`, error);
@@ -775,8 +866,181 @@
                 allGames = [];
                 filteredGames = [];
             } finally {
+                isLoadingGames = false;
                 showLoading(false);
                 updateGamesInterface();
+            }
+        }
+
+        // 從資料庫載入用戶遊戲 - 修復關聯查詢
+        async function loadUserGamesFromDB(steamId) {
+            try {
+                if (!supabase) return null;
+                
+                // 首先找到用戶ID
+                const { data: user, error: userError } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('steam_id', steamId)
+                    .single();
+                
+                if (userError || !user) {
+                    console.log(`用戶 ${steamId} 在資料庫中不存在`);
+                    return null;
+                }
+                
+                // 查詢用戶遊戲關聯和遊戲詳情
+                const { data: userGames, error } = await supabase
+                    .from('user_games')
+                    .select(`
+                        playtime_forever,
+                        games!inner (
+                            steam_app_id,
+                            name,
+                            header_image
+                        )
+                    `)
+                    .eq('user_id', user.id);
+                
+                if (error) {
+                    console.error('從資料庫載入遊戲失敗:', error);
+                    return null;
+                }
+                
+                if (!userGames || userGames.length === 0) {
+                    console.log(`用戶 ${steamId} 在資料庫中沒有遊戲數據`);
+                    return null;
+                }
+                
+                // 轉換資料庫格式為Steam API格式
+                const games = userGames.map(ug => ({
+                    appid: ug.games.steam_app_id,
+                    name: ug.games.name,
+                    playtime_forever: ug.playtime_forever || 0,
+                    img_icon_url: ug.games.header_image || ''
+                }));
+                
+                console.log(`從資料庫載入用戶 ${steamId} 的 ${games.length} 個遊戲`);
+                return games;
+                
+            } catch (error) {
+                console.error('資料庫查詢錯誤:', error);
+                return null;
+            }
+        }
+
+        // 保存用戶遊戲到資料庫 - 使用遊戲ID而非app_id作為外鍵
+        async function saveUserGamesToDB(steamId, games) {
+            try {
+                if (!supabase || !games || games.length === 0) return;
+                
+                console.log(`保存用戶 ${steamId} 的 ${games.length} 個遊戲到資料庫`);
+                
+                // 首先確保用戶存在
+                const { data: user, error: userError } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('steam_id', steamId)
+                    .single();
+                
+                if (userError || !user) {
+                    console.error('找不到用戶或用戶查詢失敗:', userError);
+                    return;
+                }
+                
+                // 先刪除該用戶的舊遊戲關聯
+                await supabase
+                    .from('user_games')
+                    .delete()
+                    .eq('user_id', user.id);
+                
+                // 批量處理遊戲數據
+                const batchSize = 50;
+                const totalBatches = Math.ceil(games.length / batchSize);
+                
+                for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+                    const startIndex = batchIndex * batchSize;
+                    const endIndex = Math.min(startIndex + batchSize, games.length);
+                    const batchGames = games.slice(startIndex, endIndex);
+                    
+                    console.log(`處理批次 ${batchIndex + 1}/${totalBatches}: ${batchGames.length} 個遊戲`);
+                    
+                    // 準備遊戲數據並插入/更新
+                    for (const game of batchGames) {
+                        try {
+                            // 插入或更新遊戲記錄
+                            const { data: gameRecord, error: gameError } = await supabase
+                                .from('games')
+                                .upsert({
+                                    steam_app_id: game.appid,
+                                    name: game.name || `Game ${game.appid}`,
+                                    header_image: game.img_icon_url || ''
+                                }, { 
+                                    onConflict: 'steam_app_id',
+                                    ignoreDuplicates: false
+                                })
+                                .select('id')
+                                .single();
+                            
+                            if (gameError) {
+                                console.error(`保存遊戲 ${game.appid} 失敗:`, gameError);
+                                continue;
+                            }
+                            
+                            // 如果沒有返回遊戲記錄，嘗試查詢
+                            let gameId;
+                            if (gameRecord && gameRecord.id) {
+                                gameId = gameRecord.id;
+                            } else {
+                                const { data: existingGame } = await supabase
+                                    .from('games')
+                                    .select('id')
+                                    .eq('steam_app_id', game.appid)
+                                    .single();
+                                
+                                if (!existingGame) {
+                                    console.error(`無法找到遊戲記錄 ${game.appid}`);
+                                    continue;
+                                }
+                                gameId = existingGame.id;
+                            }
+                            
+                            // 插入用戶遊戲關聯
+                            const { error: userGameError } = await supabase
+                                .from('user_games')
+                                .insert({
+                                    user_id: user.id,
+                                    game_id: gameId,
+                                    playtime_forever: game.playtime_forever || 0
+                                });
+                            
+                            if (userGameError) {
+                                console.error(`保存用戶遊戲關聯失敗:`, userGameError);
+                            }
+                            
+                        } catch (error) {
+                            console.error(`處理遊戲 ${game.appid} 時發生錯誤:`, error);
+                        }
+                    }
+                }
+                
+                console.log(`成功保存用戶 ${steamId} 的遊戲數據到資料庫`);
+                
+                // 更新用戶統計
+                const { error: updateError } = await supabase
+                    .from('users')
+                    .update({ 
+                        game_count: games.length,
+                        total_playtime: games.reduce((total, game) => total + (game.playtime_forever || 0), 0)
+                    })
+                    .eq('id', user.id);
+                
+                if (updateError) {
+                    console.error('更新用戶統計失敗:', updateError);
+                }
+                
+            } catch (error) {
+                console.error('保存遊戲數據時發生錯誤:', error);
             }
         }
 
@@ -867,7 +1131,7 @@
             return [];
         }
 
-        // 備用模擬遊戲數據
+        // 備用模擬遊戲數據（修復共享帳號四號）
         function getFallbackGames(steamId) {
             const gameLibraries = {
                 '76561199470483407': [
@@ -889,6 +1153,7 @@
                     { appid: 252490, name: 'Rust', playtime_forever: 1200, img_icon_url: '1f4027c4cb96b3ecc17ff62f6c9d11a6.jpg' }
                 ],
                 '76561199509470810': [
+                    // 修復：為共享帳號四號添加一些遊戲
                     { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 1500, img_icon_url: '69f7ebe2735c366c65c0b33dae00e12dc40edbe4' },
                     { appid: 440, name: 'Team Fortress 2', playtime_forever: 400, img_icon_url: 'e3f595a92552da3d664ad00277fad2107345f743' },
                     { appid: 252490, name: 'Rust', playtime_forever: 1000, img_icon_url: '1f4027c4cb96b3ecc17ff62f6c9d11a6.jpg' },
@@ -1046,7 +1311,7 @@
             updateGamesInterface();
         }
 
-        // 更新遊戲界面（增強版）
+        // 更新遊戲界面（修復重複創建問題）
         function updateGamesInterface() {
             try {
                 if (!elements.gamesGrid || !elements.emptyState) {
@@ -1054,7 +1319,10 @@
                     return;
                 }
                 
-                elements.gamesGrid.innerHTML = '';
+                // 確實清空現有內容
+                while (elements.gamesGrid.firstChild) {
+                    elements.gamesGrid.removeChild(elements.gamesGrid.firstChild);
+                }
                 
                 if (filteredGames.length === 0) {
                     elements.emptyState.classList.remove('hidden');
@@ -1063,38 +1331,28 @@
                     elements.emptyState.classList.add('hidden');
                     elements.gamesGrid.classList.remove('hidden');
                     
-                    // 批量創建遊戲卡片，避免一次性創建太多導致性能問題
-                    const batchSize = 20;
-                    let currentIndex = 0;
+                    // 使用DocumentFragment提高性能並確保一次性添加
+                    const fragment = document.createDocumentFragment();
+                    let createdCount = 0;
                     
-                    function createNextBatch() {
-                        const endIndex = Math.min(currentIndex + batchSize, filteredGames.length);
-                        
-                        for (let i = currentIndex; i < endIndex; i++) {
-                            try {
-                                const game = filteredGames[i];
-                                if (game && game.name) {
-                                    const gameCard = createGameCard(game);
-                                    if (gameCard) {
-                                        elements.gamesGrid.appendChild(gameCard);
-                                    }
+                    for (let i = 0; i < filteredGames.length; i++) {
+                        try {
+                            const game = filteredGames[i];
+                            if (game && game.name) {
+                                const gameCard = createGameCard(game);
+                                if (gameCard) {
+                                    fragment.appendChild(gameCard);
+                                    createdCount++;
                                 }
-                            } catch (error) {
-                                console.error(`創建遊戲卡片 ${i} 時發生錯誤:`, error, filteredGames[i]);
                             }
-                        }
-                        
-                        currentIndex = endIndex;
-                        
-                        if (currentIndex < filteredGames.length) {
-                            // 使用 setTimeout 讓瀏覽器有時間處理其他任務
-                            setTimeout(createNextBatch, 10);
-                        } else {
-                            console.log(`成功創建 ${elements.gamesGrid.children.length} 個遊戲卡片`);
+                        } catch (error) {
+                            console.error(`創建遊戲卡片 ${i} 時發生錯誤:`, error, filteredGames[i]);
                         }
                     }
                     
-                    createNextBatch();
+                    // 一次性添加所有卡片
+                    elements.gamesGrid.appendChild(fragment);
+                    console.log(`成功創建 ${createdCount} 個遊戲卡片，顯示 ${filteredGames.length} 個遊戲`);
                 }
                 
                 updateStats();
