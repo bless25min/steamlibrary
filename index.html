@@ -60,6 +60,40 @@
             background: linear-gradient(135deg, #3b82f6, #1d4ed8);
             color: white;
         }
+
+        .genre-tag {
+            transition: all 0.2s ease;
+        }
+        
+        .genre-tag.active {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .price-range {
+            background: linear-gradient(to right, #3b82f6, #8b5cf6);
+        }
+
+        .modal {
+            backdrop-filter: blur(10px);
+        }
+
+        .rating-star {
+            color: #fbbf24;
+        }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+            100% { content: ''; }
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 min-h-screen text-white">
@@ -95,6 +129,24 @@
     </nav>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Steam連結狀態提示 -->
+        <div id="steamLinkBanner" class="hidden glass-effect rounded-xl p-4 mb-6 border-l-4 border-yellow-400">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.232 14.5c-.77.833.192 2.5 1.732 2.5z"/>
+                    </svg>
+                    <div>
+                        <div class="font-medium">連結您的Steam帳號</div>
+                        <div class="text-sm text-slate-300">連結Steam帳號後可查看您的個人遊戲庫並與其他用戶比較</div>
+                    </div>
+                </div>
+                <button id="linkSteamBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    連結Steam
+                </button>
+            </div>
+        </div>
+
         <!-- 用戶選擇面板 -->
         <div id="userPanel" class="glass-effect rounded-xl p-6 mb-8">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
@@ -114,12 +166,12 @@
             </div>
         </div>
 
-        <!-- 篩選和統計面板 -->
+        <!-- 高級篩選和統計面板 -->
         <div class="glass-effect rounded-xl p-6 mb-8">
-            <div class="flex flex-col lg:flex-row gap-6">
-                <!-- 篩選選項 -->
+            <!-- 基本篩選 -->
+            <div class="flex flex-col lg:flex-row gap-6 mb-6">
                 <div class="flex-1">
-                    <h3 class="text-sm font-medium text-slate-300 mb-3">篩選遊戲</h3>
+                    <h3 class="text-sm font-medium text-slate-300 mb-3">遊戲篩選</h3>
                     <div class="flex flex-wrap gap-2">
                         <button class="filter-tag active px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-filter="all">
                             全部遊戲
@@ -133,21 +185,89 @@
                     </div>
                 </div>
                 
-                <!-- 排序選項 -->
                 <div class="flex-1">
                     <h3 class="text-sm font-medium text-slate-300 mb-3">排序方式</h3>
                     <select id="sortSelect" class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm w-full lg:w-auto">
                         <option value="commonality">按共通度</option>
                         <option value="name">按名稱</option>
+                        <option value="rating">按評分</option>
+                        <option value="price">按價格</option>
                         <option value="playtime">按遊玩時間</option>
                     </select>
                 </div>
                 
-                <!-- 搜尋框 -->
                 <div class="flex-1">
                     <h3 class="text-sm font-medium text-slate-300 mb-3">搜尋遊戲</h3>
                     <input id="searchInput" type="text" placeholder="輸入遊戲名稱..." 
                            class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm w-full">
+                </div>
+            </div>
+
+            <!-- 高級篩選 -->
+            <div class="border-t border-slate-600/30 pt-6">
+                <button id="advancedFilterToggle" class="flex items-center space-x-2 text-sm text-blue-400 hover:text-blue-300 mb-4">
+                    <span>高級篩選</span>
+                    <svg id="advancedFilterIcon" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+
+                <div id="advancedFilters" class="hidden space-y-6">
+                    <!-- 遊戲類型篩選 -->
+                    <div>
+                        <h4 class="text-sm font-medium text-slate-300 mb-3">遊戲類型</h4>
+                        <div id="genreFilters" class="flex flex-wrap gap-2">
+                            <!-- 動態生成類型標籤 -->
+                        </div>
+                    </div>
+
+                    <!-- 評分範圍 -->
+                    <div>
+                        <h4 class="text-sm font-medium text-slate-300 mb-3">評分範圍</h4>
+                        <div class="flex items-center space-x-4">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-sm text-slate-400">最低:</span>
+                                <input id="minRating" type="range" min="0" max="100" value="0" 
+                                       class="w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                                <span id="minRatingValue" class="text-sm text-slate-300 w-8">0%</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-sm text-slate-400">最高:</span>
+                                <input id="maxRating" type="range" min="0" max="100" value="100" 
+                                       class="w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                                <span id="maxRatingValue" class="text-sm text-slate-300 w-8">100%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 價格範圍 -->
+                    <div>
+                        <h4 class="text-sm font-medium text-slate-300 mb-3">價格範圍</h4>
+                        <div class="flex flex-wrap gap-2">
+                            <button class="filter-tag active px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-price="all">
+                                所有價格
+                            </button>
+                            <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-price="free">
+                                免費
+                            </button>
+                            <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-price="low">
+                                $0-10
+                            </button>
+                            <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-price="mid">
+                                $10-30
+                            </button>
+                            <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-price="high">
+                                $30+
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 重置篩選 -->
+                    <div class="flex justify-end">
+                        <button id="resetFilters" class="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg text-sm transition-colors">
+                            重置篩選
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -176,6 +296,12 @@
 
         <!-- 載入狀態 -->
         <div id="loadingState" class="hidden">
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center space-x-2 text-blue-400">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+                    <span class="loading-dots">正在載入遊戲詳細資訊</span>
+                </div>
+            </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                 <!-- 骨架屏 -->
                 <div class="skeleton rounded-xl aspect-[3/4] w-full"></div>
@@ -204,6 +330,39 @@
         </div>
     </div>
 
+    <!-- Steam連結模態框 -->
+    <div id="steamLinkModal" class="fixed inset-0 bg-black/50 modal hidden z-50 flex items-center justify-center p-4">
+        <div class="glass-effect rounded-xl max-w-md w-full p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">連結Steam帳號</h3>
+                <button id="closeSteamModal" class="text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Steam個人檔案連結</label>
+                    <input id="steamProfileInput" type="text" 
+                           placeholder="https://steamcommunity.com/profiles/..." 
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                    <div class="text-xs text-slate-400 mt-1">
+                        請輸入您的Steam個人檔案公開連結
+                    </div>
+                </div>
+                <div class="flex space-x-3">
+                    <button id="saveSteamLink" class="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        儲存連結
+                    </button>
+                    <button id="cancelSteamLink" class="flex-1 bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 配置
         const SUPABASE_CONFIG = {
@@ -227,8 +386,12 @@
         let selectedUsers = [];
         let allGames = [];
         let filteredGames = [];
+        let gameDetailsCache = {};
         let currentFilter = 'all';
         let currentSort = 'commonality';
+        let selectedGenres = [];
+        let ratingRange = { min: 0, max: 100 };
+        let priceFilter = 'all';
 
         // 共享帳號
         const SHARED_ACCOUNTS = [
@@ -238,6 +401,13 @@
             { id: '76561199509470810', name: '共享帳號 #4', isShared: true }
         ];
 
+        // 遊戲類型列表
+        const GAME_GENRES = [
+            'Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Sports', 
+            'Racing', 'Puzzle', 'Platformer', 'Shooter', 'Fighting', 'Horror',
+            'Survival', 'Sandbox', 'MMORPG', 'Card Game', 'Board Game', 'Educational'
+        ];
+
         // DOM 元素
         const elements = {
             loginBtn: document.getElementById('loginBtn'),
@@ -245,6 +415,8 @@
             userInfo: document.getElementById('userInfo'),
             userAvatar: document.getElementById('userAvatar'),
             userName: document.getElementById('userName'),
+            steamLinkBanner: document.getElementById('steamLinkBanner'),
+            linkSteamBtn: document.getElementById('linkSteamBtn'),
             userList: document.getElementById('userList'),
             gamesGrid: document.getElementById('gamesGrid'),
             loadingState: document.getElementById('loadingState'),
@@ -256,7 +428,21 @@
             totalGames: document.getElementById('totalGames'),
             commonGames: document.getElementById('commonGames'),
             selectedUsers: document.getElementById('selectedUsers'),
-            showingGames: document.getElementById('showingGames')
+            showingGames: document.getElementById('showingGames'),
+            advancedFilterToggle: document.getElementById('advancedFilterToggle'),
+            advancedFilters: document.getElementById('advancedFilters'),
+            advancedFilterIcon: document.getElementById('advancedFilterIcon'),
+            genreFilters: document.getElementById('genreFilters'),
+            minRating: document.getElementById('minRating'),
+            maxRating: document.getElementById('maxRating'),
+            minRatingValue: document.getElementById('minRatingValue'),
+            maxRatingValue: document.getElementById('maxRatingValue'),
+            resetFilters: document.getElementById('resetFilters'),
+            steamLinkModal: document.getElementById('steamLinkModal'),
+            steamProfileInput: document.getElementById('steamProfileInput'),
+            saveSteamLink: document.getElementById('saveSteamLink'),
+            cancelSteamLink: document.getElementById('cancelSteamLink'),
+            closeSteamModal: document.getElementById('closeSteamModal')
         };
 
         // 初始化
@@ -264,6 +450,7 @@
             await checkAuth();
             await loadUsers();
             setupEventListeners();
+            initializeGenreFilters();
             
             // 預設選中共享帳號
             selectedUsers = [...SHARED_ACCOUNTS];
@@ -275,17 +462,39 @@
         function setupEventListeners() {
             elements.loginBtn.addEventListener('click', login);
             elements.logoutBtn.addEventListener('click', logout);
+            elements.linkSteamBtn.addEventListener('click', showSteamLinkModal);
             elements.selectAllBtn.addEventListener('click', selectAllUsers);
             elements.deselectAllBtn.addEventListener('click', deselectAllUsers);
             elements.searchInput.addEventListener('input', debounce(filterGames, 300));
             elements.sortSelect.addEventListener('change', sortGames);
+            elements.advancedFilterToggle.addEventListener('click', toggleAdvancedFilters);
+            elements.resetFilters.addEventListener('click', resetAllFilters);
+
+            // Steam連結模態框
+            elements.saveSteamLink.addEventListener('click', saveSteamLink);
+            elements.cancelSteamLink.addEventListener('click', hideSteamLinkModal);
+            elements.closeSteamModal.addEventListener('click', hideSteamLinkModal);
+
+            // 評分範圍滑桿
+            elements.minRating.addEventListener('input', updateRatingRange);
+            elements.maxRating.addEventListener('input', updateRatingRange);
 
             // 篩選按鈕
-            document.querySelectorAll('.filter-tag').forEach(btn => {
+            document.querySelectorAll('.filter-tag[data-filter]').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('.filter-tag').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.filter-tag[data-filter]').forEach(b => b.classList.remove('active'));
                     e.target.classList.add('active');
                     currentFilter = e.target.dataset.filter;
+                    filterGames();
+                });
+            });
+
+            // 價格篩選按鈕
+            document.querySelectorAll('.filter-tag[data-price]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.filter-tag[data-price]').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    priceFilter = e.target.dataset.price;
                     filterGames();
                 });
             });
@@ -297,7 +506,182 @@
             if (session) {
                 currentUser = session.user;
                 updateAuthInterface(true);
+                await checkSteamLinkStatus();
             }
+        }
+
+        // 檢查Steam連結狀態
+        async function checkSteamLinkStatus() {
+            if (!currentUser) return;
+
+            try {
+                const { data: userData, error } = await supabase
+                    .from('users')
+                    .select('steam_id')
+                    .eq('discord_id', currentUser.id)
+                    .single();
+
+                if (error || !userData?.steam_id) {
+                    elements.steamLinkBanner.classList.remove('hidden');
+                } else {
+                    elements.steamLinkBanner.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('檢查Steam連結狀態失敗:', error);
+            }
+        }
+
+        // 顯示Steam連結模態框
+        function showSteamLinkModal() {
+            elements.steamLinkModal.classList.remove('hidden');
+        }
+
+        // 隱藏Steam連結模態框
+        function hideSteamLinkModal() {
+            elements.steamLinkModal.classList.add('hidden');
+            elements.steamProfileInput.value = '';
+        }
+
+        // 儲存Steam連結
+        async function saveSteamLink() {
+            const profileUrl = elements.steamProfileInput.value.trim();
+            if (!profileUrl) {
+                showNotification('請輸入Steam個人檔案連結', 'error');
+                return;
+            }
+
+            const steamId = extractSteamId(profileUrl);
+            if (!steamId) {
+                showNotification('無效的Steam個人檔案連結', 'error');
+                return;
+            }
+
+            try {
+                const { error } = await supabase
+                    .from('users')
+                    .upsert({
+                        discord_id: currentUser.id,
+                        username: currentUser.user_metadata.full_name || currentUser.email,
+                        avatar_url: currentUser.user_metadata.avatar_url,
+                        steam_id: steamId,
+                        steam_profile_url: profileUrl
+                    });
+
+                if (error) throw error;
+
+                showNotification('Steam帳號連結成功！', 'success');
+                hideSteamLinkModal();
+                elements.steamLinkBanner.classList.add('hidden');
+                await loadUsers();
+            } catch (error) {
+                console.error('儲存Steam連結失敗:', error);
+                showNotification('儲存失敗，請稍後再試', 'error');
+            }
+        }
+
+        // 提取Steam ID
+        function extractSteamId(profileUrl) {
+            const patterns = [
+                /steamcommunity\.com\/profiles\/(\d+)/,
+                /steamcommunity\.com\/id\/([^\/]+)/
+            ];
+
+            for (const pattern of patterns) {
+                const match = profileUrl.match(pattern);
+                if (match) {
+                    return match[1];
+                }
+            }
+            return null;
+        }
+
+        // 初始化類型篩選器
+        function initializeGenreFilters() {
+            elements.genreFilters.innerHTML = '';
+            GAME_GENRES.forEach(genre => {
+                const tag = document.createElement('button');
+                tag.className = 'genre-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors';
+                tag.textContent = genre;
+                tag.dataset.genre = genre;
+                
+                tag.addEventListener('click', () => toggleGenreFilter(genre, tag));
+                elements.genreFilters.appendChild(tag);
+            });
+        }
+
+        // 切換類型篩選
+        function toggleGenreFilter(genre, element) {
+            const index = selectedGenres.indexOf(genre);
+            if (index === -1) {
+                selectedGenres.push(genre);
+                element.classList.add('active');
+            } else {
+                selectedGenres.splice(index, 1);
+                element.classList.remove('active');
+            }
+            filterGames();
+        }
+
+        // 切換高級篩選
+        function toggleAdvancedFilters() {
+            const isHidden = elements.advancedFilters.classList.contains('hidden');
+            if (isHidden) {
+                elements.advancedFilters.classList.remove('hidden');
+                elements.advancedFilterIcon.style.transform = 'rotate(180deg)';
+            } else {
+                elements.advancedFilters.classList.add('hidden');
+                elements.advancedFilterIcon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // 更新評分範圍
+        function updateRatingRange() {
+            ratingRange.min = parseInt(elements.minRating.value);
+            ratingRange.max = parseInt(elements.maxRating.value);
+            
+            // 確保最小值不大於最大值
+            if (ratingRange.min > ratingRange.max) {
+                ratingRange.min = ratingRange.max;
+                elements.minRating.value = ratingRange.min;
+            }
+            
+            elements.minRatingValue.textContent = `${ratingRange.min}%`;
+            elements.maxRatingValue.textContent = `${ratingRange.max}%`;
+            
+            filterGames();
+        }
+
+        // 重置所有篩選
+        function resetAllFilters() {
+            // 重置基本篩選
+            currentFilter = 'all';
+            document.querySelectorAll('.filter-tag[data-filter]').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.filter === 'all') btn.classList.add('active');
+            });
+
+            // 重置類型篩選
+            selectedGenres = [];
+            document.querySelectorAll('.genre-tag').forEach(tag => tag.classList.remove('active'));
+
+            // 重置評分範圍
+            ratingRange = { min: 0, max: 100 };
+            elements.minRating.value = 0;
+            elements.maxRating.value = 100;
+            elements.minRatingValue.textContent = '0%';
+            elements.maxRatingValue.textContent = '100%';
+
+            // 重置價格篩選
+            priceFilter = 'all';
+            document.querySelectorAll('.filter-tag[data-price]').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.price === 'all') btn.classList.add('active');
+            });
+
+            // 重置搜尋
+            elements.searchInput.value = '';
+
+            filterGames();
         }
 
         // 登入
@@ -322,6 +706,7 @@
             } else {
                 currentUser = null;
                 updateAuthInterface(false);
+                elements.steamLinkBanner.classList.add('hidden');
                 showNotification('已成功登出', 'success');
             }
         }
@@ -333,7 +718,7 @@
                 elements.logoutBtn.classList.remove('hidden');
                 elements.userInfo.classList.remove('hidden');
                 elements.userInfo.classList.add('flex');
-                elements.userAvatar.src = currentUser.user_metadata.avatar_url || 'https://via.placeholder.com/32';
+                elements.userAvatar.src = currentUser.user_metadata.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentUser.user_metadata.full_name || 'User');
                 elements.userName.textContent = currentUser.user_metadata.full_name || currentUser.email;
             } else {
                 elements.loginBtn.classList.remove('hidden');
@@ -462,6 +847,10 @@
                 );
                 
                 allGames = calculateCommonGames(allUserGames);
+                
+                // 載入遊戲詳細資訊
+                await loadGameDetails(allGames);
+                
                 filterGames();
                 
             } catch (error) {
@@ -492,6 +881,82 @@
             }
         }
 
+        // 載入遊戲詳細資訊
+        async function loadGameDetails(games) {
+            const batchSize = 10;
+            const totalBatches = Math.ceil(games.length / batchSize);
+            
+            for (let i = 0; i < totalBatches; i++) {
+                const batch = games.slice(i * batchSize, (i + 1) * batchSize);
+                await Promise.all(batch.map(game => fetchGameDetails(game.appid)));
+                
+                // 更新進度
+                const progress = Math.round(((i + 1) / totalBatches) * 100);
+                updateLoadingProgress(progress);
+            }
+        }
+
+        // 獲取遊戲詳細資訊
+        async function fetchGameDetails(appId) {
+            if (gameDetailsCache[appId]) {
+                return gameDetailsCache[appId];
+            }
+
+            try {
+                const steamUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=tchinese`;
+                const proxyUrl = `${STEAM_CONFIG.PROXY_URL}${encodeURIComponent(steamUrl)}`;
+                
+                const response = await fetch(proxyUrl);
+                const data = await response.json();
+                const gameData = JSON.parse(data.contents);
+                
+                if (gameData[appId] && gameData[appId].success) {
+                    const details = gameData[appId].data;
+                    gameDetailsCache[appId] = {
+                        price: details.price_overview?.final_formatted || '免費',
+                        priceRaw: details.price_overview?.final || 0,
+                        genres: details.genres?.map(g => g.description) || [],
+                        rating: details.metacritic?.score || null,
+                        shortDescription: details.short_description || '',
+                        developers: details.developers || [],
+                        publishers: details.publishers || []
+                    };
+                } else {
+                    gameDetailsCache[appId] = {
+                        price: '未知',
+                        priceRaw: 0,
+                        genres: [],
+                        rating: null,
+                        shortDescription: '',
+                        developers: [],
+                        publishers: []
+                    };
+                }
+                
+                return gameDetailsCache[appId];
+            } catch (error) {
+                console.error(`獲取遊戲 ${appId} 詳細資訊失敗:`, error);
+                gameDetailsCache[appId] = {
+                    price: '未知',
+                    priceRaw: 0,
+                    genres: [],
+                    rating: null,
+                    shortDescription: '',
+                    developers: [],
+                    publishers: []
+                };
+                return gameDetailsCache[appId];
+            }
+        }
+
+        // 更新載入進度
+        function updateLoadingProgress(progress) {
+            const loadingElement = document.querySelector('.loading-dots');
+            if (loadingElement) {
+                loadingElement.textContent = `正在載入遊戲詳細資訊 ${progress}%`;
+            }
+        }
+
         // 計算共同遊戲
         function calculateCommonGames(allUserGames) {
             const gameOccurrences = {};
@@ -518,7 +983,8 @@
                 commonality: game.owners.length,
                 commonalityPercentage: Math.round((game.owners.length / selectedUsers.length) * 100),
                 isCommon: game.owners.length >= Math.max(1, Math.ceil(selectedUsers.length * 0.5)),
-                averagePlaytime: Math.round(game.totalPlaytime / game.owners.length)
+                averagePlaytime: Math.round(game.totalPlaytime / game.owners.length),
+                details: gameDetailsCache[game.appid] || {}
             }));
         }
 
@@ -526,7 +992,7 @@
         function filterGames() {
             let filtered = [...allGames];
             
-            // 按篩選條件
+            // 按基本篩選條件
             switch (currentFilter) {
                 case 'common':
                     filtered = filtered.filter(game => game.isCommon);
@@ -543,6 +1009,34 @@
                     game.name.toLowerCase().includes(searchTerm)
                 );
             }
+
+            // 按類型篩選
+            if (selectedGenres.length > 0) {
+                filtered = filtered.filter(game => 
+                    game.details.genres?.some(genre => selectedGenres.includes(genre))
+                );
+            }
+
+            // 按評分篩選
+            filtered = filtered.filter(game => {
+                const rating = game.details.rating;
+                if (rating === null) return ratingRange.min === 0; // 無評分遊戲只在最小值為0時顯示
+                return rating >= ratingRange.min && rating <= ratingRange.max;
+            });
+
+            // 按價格篩選
+            if (priceFilter !== 'all') {
+                filtered = filtered.filter(game => {
+                    const price = game.details.priceRaw || 0;
+                    switch (priceFilter) {
+                        case 'free': return price === 0;
+                        case 'low': return price > 0 && price <= 1000; // $10 in cents
+                        case 'mid': return price > 1000 && price <= 3000; // $10-30
+                        case 'high': return price > 3000; // $30+
+                        default: return true;
+                    }
+                });
+            }
             
             filteredGames = filtered;
             sortGames();
@@ -553,6 +1047,12 @@
             switch (currentSort) {
                 case 'name':
                     filteredGames.sort((a, b) => a.name.localeCompare(b.name));
+                    break;
+                case 'rating':
+                    filteredGames.sort((a, b) => (b.details.rating || 0) - (a.details.rating || 0));
+                    break;
+                case 'price':
+                    filteredGames.sort((a, b) => (a.details.priceRaw || 0) - (b.details.priceRaw || 0));
                     break;
                 case 'playtime':
                     filteredGames.sort((a, b) => b.averagePlaytime - a.averagePlaytime);
@@ -591,8 +1091,8 @@
             const card = document.createElement('div');
             card.className = 'game-card glass-effect rounded-xl overflow-hidden fade-in';
             
-            const imageUrl = `${STEAM_CONFIG.IMAGE_BASE}/${game.appid}/${game.img_icon_url}.jpg`;
             const headerImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`;
+            const details = game.details || {};
             
             card.innerHTML = `
                 <div class="relative">
@@ -611,10 +1111,28 @@
                     
                     <!-- 共同遊戲標籤 -->
                     ${game.isCommon ? '<div class="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded text-xs font-medium">共同</div>' : ''}
+                    
+                    <!-- 評分徽章 -->
+                    ${details.rating ? `<div class="absolute bottom-2 right-2 bg-yellow-500/90 text-black px-2 py-1 rounded text-xs font-bold">${details.rating}</div>` : ''}
                 </div>
                 
                 <div class="p-4">
                     <h3 class="font-medium text-sm mb-2 line-clamp-2 leading-tight">${game.name}</h3>
+                    
+                    <!-- 價格和類型 -->
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-green-400 font-semibold text-sm">${details.price || '未知'}</span>
+                        ${details.genres?.length > 0 ? `<span class="text-xs text-slate-400">${details.genres[0]}</span>` : ''}
+                    </div>
+                    
+                    <!-- 遊戲類型標籤 -->
+                    ${details.genres?.length > 0 ? `
+                        <div class="flex flex-wrap gap-1 mb-2">
+                            ${details.genres.slice(0, 2).map(genre => 
+                                `<span class="bg-slate-600 text-xs px-2 py-1 rounded">${genre}</span>`
+                            ).join('')}
+                        </div>
+                    ` : ''}
                     
                     <div class="space-y-2">
                         <!-- 共通度進度條 -->
@@ -700,11 +1218,13 @@
             if (event === 'SIGNED_IN') {
                 currentUser = session.user;
                 updateAuthInterface(true);
+                checkSteamLinkStatus();
                 loadUsers();
                 showNotification('登入成功！', 'success');
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
                 updateAuthInterface(false);
+                elements.steamLinkBanner.classList.add('hidden');
                 // 重置到只有共享帳號
                 selectedUsers = [...SHARED_ACCOUNTS];
                 loadUsers();
