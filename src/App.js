@@ -1,10 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-// Supabase 設定
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 圖示組件
 const Icons = {
@@ -13,13 +7,8 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
     </svg>
   ),
-  Github: () => (
-    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-    </svg>
-  ),
-  RefreshCw: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  RefreshCw: ({ className = "w-5 h-5" }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
     </svg>
   ),
@@ -27,16 +16,6 @@ const Icons = {
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  ),
-  User: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-    </svg>
-  ),
-  LogOut: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
     </svg>
   ),
   Plus: () => (
@@ -48,157 +27,98 @@ const Icons = {
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
     </svg>
+  ),
+  AlertCircle: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  ExternalLink: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+    </svg>
+  ),
+  Star: () => (
+    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  ),
+  X: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
   )
 };
 
 function App() {
-  // 狀態管理
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [gameLibrary, setGameLibrary] = useState([]);
-  const [wishlist, setWishlist] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAccount, setSelectedAccount] = useState('all');
+  // 基本狀態
+  const [activeTab, setActiveTab] = useState('library');
   const [showSettings, setShowSettings] = useState(false);
+  const [showWishForm, setShowWishForm] = useState(false);
+  
+  // Steam設定
   const [steamConfig, setSteamConfig] = useState({
+    apiKey: '',
     steamIds: ['', '', '', ''],
     accountNames: ['帳號1', '帳號2', '帳號3', '帳號4']
   });
-  const [showWishForm, setShowWishForm] = useState(false);
-  const [newWish, setNewWish] = useState({ name: '', reason: '' });
+
+  // 遊戲數據
+  const [gameLibrary, setGameLibrary] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
+  
+  // UI狀態
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState('all');
+  const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState('未同步');
   const [lastSync, setLastSync] = useState(null);
+  const [newWish, setNewWish] = useState({ name: '', reason: '' });
 
-  // 載入用戶資料
-  const loadUserData = async (userId) => {
-    try {
-      // 載入Steam設定
-      const { data: configData } = await supabase
-        .from('user_steam_config')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
-      if (configData) {
-        setSteamConfig({
-          steamIds: configData.steam_ids || ['', '', '', ''],
-          accountNames: configData.account_names || ['帳號1', '帳號2', '帳號3', '帳號4']
-        });
-      }
-
-      // 載入遊戲庫存
-      const { data: gamesData } = await supabase
-        .from('steam_games')
-        .select('*')
-        .order('name');
-
-      if (gamesData) {
-        setGameLibrary(gamesData);
-      }
-
-      // 載入許願清單
-      const { data: wishData } = await supabase
-        .from('wishlists')
-        .select('*')
-        .order('votes', { ascending: false });
-
-      if (wishData) {
-        setWishlist(wishData);
-      }
-
-    } catch (err) {
-      console.error('載入用戶資料失敗:', err);
-    }
-  };
-
-  // 檢查用戶登入狀態
+  // 載入保存的設定
   useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        
-        if (data?.session) {
-          setUser(data.session.user);
-          await loadUserData(data.session.user.id);
-          
-          // 清理 URL 中的認證片段
-          if (window.location.hash.includes('access_token')) {
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        }
-      } catch (err) {
-        console.error('檢查用戶狀態失敗:', err);
-      }
-    };
-    
-    checkUser();
+    const savedConfig = localStorage.getItem('steamConfig');
+    if (savedConfig) {
+      setSteamConfig(JSON.parse(savedConfig));
+    }
 
-    // 監聽認證狀態變化
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        setUser(session.user);
-        await loadUserData(session.user.id);
-        
-        // 清理 URL
-        if (window.location.hash.includes('access_token')) {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setGameLibrary([]);
-        setWishlist([]);
-      }
-    });
+    const savedGames = localStorage.getItem('gameLibrary');
+    if (savedGames) {
+      setGameLibrary(JSON.parse(savedGames));
+    }
 
-    return () => subscription.unsubscribe();
+    const savedWishes = localStorage.getItem('wishlist');
+    if (savedWishes) {
+      setWishlist(JSON.parse(savedWishes));
+    }
+
+    const savedSync = localStorage.getItem('lastSync');
+    if (savedSync) {
+      setLastSync(new Date(savedSync));
+      setSyncStatus('已同步');
+    }
   }, []);
 
-  // GitHub 登入
-  const signInWithGitHub = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github'
-      });
-      if (error) throw error;
-    } catch (err) {
-      console.error('登入錯誤:', err);
-      alert('登入失敗: ' + err.message);
-    }
-  };
-
-  // 登出
-  const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    } catch (err) {
-      alert('登出失敗: ' + err.message);
-    }
-  };
-
   // 儲存Steam設定
-  const saveSteamConfig = async () => {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from('user_steam_config')
-        .upsert({
-          user_id: user.id,
-          steam_ids: steamConfig.steamIds,
-          account_names: steamConfig.accountNames
-        });
-
-      if (error) throw error;
-      alert('Steam設定已儲存！');
-    } catch (err) {
-      alert('儲存失敗: ' + err.message);
-    }
+  const saveSteamConfig = () => {
+    localStorage.setItem('steamConfig', JSON.stringify(steamConfig));
+    setShowSettings(false);
+    alert('設定已儲存！');
   };
 
-  // 模擬同步Steam遊戲
+  // 模擬Steam API同步
   const syncSteamGames = async () => {
-    if (!user) return;
+    if (!steamConfig.apiKey) {
+      alert('請先設定Steam API密鑰');
+      setShowSettings(true);
+      return;
+    }
+
+    if (!steamConfig.steamIds.some(id => id.trim())) {
+      alert('請至少設定一個Steam ID');
+      setShowSettings(true);
+      return;
+    }
 
     setLoading(true);
     setSyncStatus('同步中...');
@@ -207,66 +127,158 @@ function App() {
       // 模擬API延遲
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // 模擬遊戲資料
+      // 模擬Steam遊戲資料
       const mockGames = [
-        { app_id: 1, name: 'Valheim', accounts: [1, 2], playtime: 127, rating: 4.8, genre: '生存', price: 'NT$ 318' },
-        { app_id: 2, name: 'Deep Rock Galactic', accounts: [1, 3, 4], playtime: 89, rating: 4.9, genre: '射擊', price: 'NT$ 590' },
-        { app_id: 3, name: 'Among Us', accounts: [1, 2, 3, 4], playtime: 45, rating: 4.3, genre: '社交', price: 'NT$ 102' },
-        { app_id: 4, name: 'Phasmophobia', accounts: [2, 3], playtime: 67, rating: 4.7, genre: '恐怖', price: 'NT$ 298' },
-        { app_id: 5, name: 'Stardew Valley', accounts: [2, 4], playtime: 203, rating: 4.9, genre: '農場', price: 'NT$ 398' }
+        { 
+          id: 1, 
+          name: 'Valheim', 
+          accounts: [1, 2], 
+          playtime: 127, 
+          rating: 4.8, 
+          genre: '生存建造', 
+          price: 'NT$ 318',
+          tags: ['合作', '維京', '建造'],
+          img_icon_url: null
+        },
+        { 
+          id: 2, 
+          name: 'Deep Rock Galactic', 
+          accounts: [1, 3, 4], 
+          playtime: 89, 
+          rating: 4.9, 
+          genre: '合作射擊', 
+          price: 'NT$ 590',
+          tags: ['合作', '礦工', 'FPS'],
+          img_icon_url: null
+        },
+        { 
+          id: 3, 
+          name: 'Among Us', 
+          accounts: [1, 2, 3, 4], 
+          playtime: 45, 
+          rating: 4.3, 
+          genre: '社交推理', 
+          price: 'NT$ 102',
+          tags: ['多人', '推理', '派對'],
+          img_icon_url: null
+        },
+        { 
+          id: 4, 
+          name: 'Phasmophobia', 
+          accounts: [2, 3], 
+          playtime: 67, 
+          rating: 4.7, 
+          genre: '恐怖合作', 
+          price: 'NT$ 298',
+          tags: ['恐怖', '合作', '鬼魂'],
+          img_icon_url: null
+        },
+        { 
+          id: 5, 
+          name: 'Stardew Valley', 
+          accounts: [2, 4], 
+          playtime: 203, 
+          rating: 4.9, 
+          genre: '農場模擬', 
+          price: 'NT$ 398',
+          tags: ['休閒', '農場', '像素'],
+          img_icon_url: null
+        },
+        { 
+          id: 6, 
+          name: 'Portal 2', 
+          accounts: [3, 4], 
+          playtime: 34, 
+          rating: 4.9, 
+          genre: '解謎', 
+          price: 'NT$ 188',
+          tags: ['解謎', '合作', '經典'],
+          img_icon_url: null
+        },
+        { 
+          id: 7, 
+          name: 'Terraria', 
+          accounts: [1, 3], 
+          playtime: 156, 
+          rating: 4.7, 
+          genre: '沙盒冒險', 
+          price: 'NT$ 268',
+          tags: ['沙盒', '建造', '2D'],
+          img_icon_url: null
+        },
+        { 
+          id: 8, 
+          name: 'Overcooked! 2', 
+          accounts: [2], 
+          playtime: 28, 
+          rating: 4.6, 
+          genre: '派對合作', 
+          price: 'NT$ 675',
+          tags: ['派對', '料理', '混亂'],
+          img_icon_url: null
+        }
       ];
 
-      // 儲存到資料庫
-      for (const game of mockGames) {
-        await supabase
-          .from('steam_games')
-          .upsert(game);
-      }
-
       setGameLibrary(mockGames);
-      setLastSync(new Date());
+      localStorage.setItem('gameLibrary', JSON.stringify(mockGames));
+      
+      const now = new Date();
+      setLastSync(now);
+      localStorage.setItem('lastSync', now.toISOString());
       setSyncStatus('同步成功');
       
-    } catch (err) {
+    } catch (error) {
       setSyncStatus('同步失敗');
-      alert('同步失敗: ' + err.message);
+      alert('同步失敗: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
   // 新增許願
-  const addWish = async () => {
-    if (!user || !newWish.name.trim()) return;
-
-    try {
-      const wishData = {
-        user_id: user.id,
-        game_name: newWish.name,
-        reason: newWish.reason,
-        requested_by: user.user_metadata?.user_name || user.user_metadata?.name || user.email,
-        votes: 1,
-        status: 'pending'
-      };
-
-      const { error } = await supabase
-        .from('wishlists')
-        .insert(wishData);
-
-      if (error) throw error;
-
-      setWishlist([wishData, ...wishlist]);
-      setNewWish({ name: '', reason: '' });
-      setShowWishForm(false);
-      
-    } catch (err) {
-      alert('新增許願失敗: ' + err.message);
+  const addWish = () => {
+    if (!newWish.name.trim()) {
+      alert('請輸入遊戲名稱');
+      return;
     }
+
+    const wish = {
+      id: Date.now(),
+      name: newWish.name,
+      reason: newWish.reason,
+      votes: 1,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedWishlist = [wish, ...wishlist];
+    setWishlist(updatedWishlist);
+    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
+    
+    setNewWish({ name: '', reason: '' });
+    setShowWishForm(false);
+  };
+
+  // 投票
+  const voteWish = (wishId) => {
+    const updatedWishlist = wishlist.map(wish => 
+      wish.id === wishId ? { ...wish, votes: wish.votes + 1 } : wish
+    );
+    setWishlist(updatedWishlist);
+    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
+  };
+
+  // 刪除許願
+  const deleteWish = (wishId) => {
+    const updatedWishlist = wishlist.filter(wish => wish.id !== wishId);
+    setWishlist(updatedWishlist);
+    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
   };
 
   // 篩選遊戲
   const filteredGames = gameLibrary.filter(game => {
-    const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         game.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesAccount = selectedAccount === 'all' || game.accounts.includes(parseInt(selectedAccount));
     return matchesSearch && matchesAccount;
   });
@@ -278,6 +290,8 @@ function App() {
     count: gameLibrary.filter(game => game.accounts.includes(acc)).length
   }));
 
+  const isConfigured = steamConfig.apiKey && steamConfig.steamIds.some(id => id.trim());
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* 頂部導航 */}
@@ -285,46 +299,23 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded flex items-center justify-center text-white font-bold">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
                 S
               </div>
-              <h1 className="text-xl font-bold">Steam庫存管理系統</h1>
-              <div className="flex items-center space-x-1 text-xs bg-gray-700 px-2 py-1 rounded">
-                <Icons.Github />
-                <span>GitHub Pages + Supabase</span>
+              <div>
+                <h1 className="text-xl font-bold">Steam 遊戲庫存管理</h1>
+                <p className="text-sm text-gray-400">簡化版 - 無需登入 • 本地存儲</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              {user ? (
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2">
-                    <Icons.User />
-                    <span className="text-sm">
-                      {user.user_metadata?.user_name || user.user_metadata?.name || user.email}
-                    </span>
-                  </div>
-                  <button
-                    onClick={signOut}
-                    className="bg-gray-600 hover:bg-gray-700 px-3 py-1 rounded text-sm flex items-center space-x-1"
-                  >
-                    <Icons.LogOut />
-                    <span>登出</span>
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={signInWithGitHub}
-                  className="flex items-center space-x-2 px-4 py-2 rounded bg-green-600 hover:bg-green-700"
-                >
-                  <Icons.Github />
-                  <span>GitHub登入</span>
-                </button>
-              )}
-              
+            <div className="flex items-center space-x-3">
+              <span className="text-sm text-gray-300">
+                {lastSync ? `最後同步: ${lastSync.toLocaleString('zh-TW')}` : '尚未同步'}
+              </span>
               <button
                 onClick={() => setShowSettings(true)}
-                className="bg-gray-600 hover:bg-gray-700 p-2 rounded"
+                className="bg-gray-600 hover:bg-gray-700 p-2 rounded-lg transition-colors"
+                title="設定"
               >
                 <Icons.Settings />
               </button>
@@ -333,16 +324,50 @@ function App() {
         </div>
       </div>
 
-      {/* 登入成功歡迎訊息 */}
-      {user && (
-        <div className="bg-green-600 text-white px-4 py-2 text-center">
-          🎉 歡迎回來，{user.user_metadata?.user_name || user.user_metadata?.name}！GitHub 登入成功
+      {/* 設定提醒 */}
+      {!isConfigured && (
+        <div className="bg-blue-600 text-blue-100 px-4 py-3 text-center">
+          <div className="flex items-center justify-center space-x-2">
+            <Icons.AlertCircle />
+            <span>請先設定Steam API密鑰和Steam ID以開始使用</span>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="underline hover:no-underline font-semibold"
+            >
+              立即設定
+            </button>
+          </div>
         </div>
       )}
 
       {/* 主要內容 */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {user ? (
+        {/* 標籤頁 */}
+        <div className="flex space-x-1 mb-6 bg-gray-800 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setActiveTab('library')}
+            className={`px-6 py-3 rounded-md transition-colors ${
+              activeTab === 'library' 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+            }`}
+          >
+            遊戲庫存 ({totalGames})
+          </button>
+          <button
+            onClick={() => setActiveTab('wishlist')}
+            className={`px-6 py-3 rounded-md transition-colors ${
+              activeTab === 'wishlist' 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+            }`}
+          >
+            許願清單 ({wishlist.length})
+          </button>
+        </div>
+
+        {/* 遊戲庫存頁面 */}
+        {activeTab === 'library' && (
           <div>
             {/* 統計面板 */}
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
@@ -365,11 +390,6 @@ function App() {
                 }`}>
                   {syncStatus}
                 </p>
-                {lastSync && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    {lastSync.toLocaleString('zh-TW')}
-                  </p>
-                )}
               </div>
             </div>
 
@@ -377,27 +397,18 @@ function App() {
             <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">控制面板</h3>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => setShowWishForm(true)}
-                    className="flex items-center space-x-2 px-4 py-2 rounded bg-purple-600 hover:bg-purple-700"
-                  >
-                    <Icons.Plus />
-                    <span>新增許願</span>
-                  </button>
-                  <button
-                    onClick={syncSteamGames}
-                    disabled={loading}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded ${
-                      loading
-                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    }`}
-                  >
-                    <Icons.RefreshCw className={loading ? 'animate-spin' : ''} />
-                    <span>{loading ? '同步中...' : '同步Steam遊戲'}</span>
-                  </button>
-                </div>
+                <button
+                  onClick={syncSteamGames}
+                  disabled={loading || !isConfigured}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                    loading || !isConfigured
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  <Icons.RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  <span>{loading ? '同步中...' : '同步Steam遊戲'}</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -405,17 +416,17 @@ function App() {
                   <Icons.Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="搜尋遊戲..."
+                    placeholder="搜尋遊戲名稱或標籤..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded pl-10 pr-4 py-2"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 
                 <select
                   value={selectedAccount}
                   onChange={(e) => setSelectedAccount(e.target.value)}
-                  className="bg-gray-700 border border-gray-600 rounded px-4 py-2"
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="all">所有帳號</option>
                   {steamConfig.accountNames.map((name, index) => (
@@ -426,13 +437,13 @@ function App() {
             </div>
 
             {/* 遊戲列表 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredGames.map(game => (
-                <div key={game.app_id} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div key={game.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-gray-600 transition-all transform hover:scale-105">
                   <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-lg font-semibold">{game.name}</h3>
-                    <div className="flex items-center space-x-1">
-                      <span className="text-yellow-400">★</span>
+                    <h3 className="text-lg font-semibold text-white line-clamp-2">{game.name}</h3>
+                    <div className="flex items-center space-x-1 text-yellow-400">
+                      <Icons.Star />
                       <span className="text-sm">{game.rating}</span>
                     </div>
                   </div>
@@ -440,24 +451,35 @@ function App() {
                   <div className="space-y-2 mb-4">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">類型：</span>
-                      <span>{game.genre}</span>
+                      <span className="text-gray-300">{game.genre}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">遊戲時間：</span>
-                      <span>{game.playtime}小時</span>
+                      <span className="text-gray-300">{game.playtime}小時</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">價格：</span>
-                      <span>{game.price}</span>
+                      <span className="text-gray-300">{game.price}</span>
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="text-sm text-gray-400 mb-2">可用帳號：</div>
+                    <div className="flex flex-wrap gap-1">
+                      {game.accounts.map(acc => (
+                        <span key={acc} className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs">
+                          {steamConfig.accountNames[acc - 1]}
+                        </span>
+                      ))}
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-sm text-gray-400 mb-2">可用帳號：</div>
-                    <div className="flex space-x-1">
-                      {game.accounts.map(acc => (
-                        <span key={acc} className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs">
-                          {steamConfig.accountNames[acc - 1]}
+                    <div className="text-sm text-gray-400 mb-2">標籤：</div>
+                    <div className="flex flex-wrap gap-1">
+                      {game.tags.map(tag => (
+                        <span key={tag} className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
+                          {tag}
                         </span>
                       ))}
                     </div>
@@ -469,77 +491,206 @@ function App() {
             {gameLibrary.length === 0 && !loading && (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icons.RefreshCw />
+                  <Icons.RefreshCw className="w-8 h-8 text-gray-400" />
                 </div>
                 <p className="text-gray-400 text-lg mb-2">尚未同步遊戲庫存</p>
-                <p className="text-gray-500">點擊「同步Steam遊戲」開始</p>
+                <p className="text-gray-500 mb-4">設定Steam API後點擊「同步Steam遊戲」開始</p>
+                {!isConfigured && (
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg transition-colors"
+                  >
+                    開始設定
+                  </button>
+                )}
+              </div>
+            )}
+
+            {filteredGames.length === 0 && gameLibrary.length > 0 && (
+              <div className="text-center py-12">
+                <p className="text-gray-400 text-lg">沒有找到符合條件的遊戲</p>
+                <p className="text-gray-500">試試調整搜尋條件或帳號篩選</p>
               </div>
             )}
           </div>
-        ) : (
-          <div className="text-center py-12">
-            <Icons.Github className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-400 text-lg mb-4">請先登入以使用Steam庫存管理功能</p>
-            <button
-              onClick={signInWithGitHub}
-              className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg flex items-center space-x-2 mx-auto"
-            >
-              <Icons.Github />
-              <span>使用GitHub登入</span>
-            </button>
+        )}
+
+        {/* 許願清單頁面 */}
+        {activeTab === 'wishlist' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">許願清單</h2>
+              <button
+                onClick={() => setShowWishForm(true)}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <Icons.Plus />
+                <span>新增許願</span>
+              </button>
+            </div>
+
+            {wishlist.length > 0 ? (
+              <div className="space-y-4">
+                {wishlist.map(wish => (
+                  <div key={wish.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold mb-2">{wish.name}</h3>
+                        {wish.reason && (
+                          <p className="text-gray-400 mb-3">{wish.reason}</p>
+                        )}
+                        <div className="text-sm text-gray-500">
+                          {new Date(wish.createdAt).toLocaleDateString('zh-TW')}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-pink-400">{wish.votes}</div>
+                          <div className="text-xs text-gray-400">票</div>
+                        </div>
+                        <button
+                          onClick={() => voteWish(wish.id)}
+                          className="bg-pink-600 hover:bg-pink-700 p-2 rounded-lg transition-colors"
+                          title="投票支持"
+                        >
+                          <Icons.Heart />
+                        </button>
+                        <button
+                          onClick={() => deleteWish(wish.id)}
+                          className="bg-red-600 hover:bg-red-700 p-2 rounded-lg transition-colors"
+                          title="刪除"
+                        >
+                          <Icons.X />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Icons.Heart className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-400 text-lg mb-2">還沒有許願遊戲</p>
+                <p className="text-gray-500 mb-4">新增第一個想要的遊戲吧！</p>
+                <button
+                  onClick={() => setShowWishForm(true)}
+                  className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg flex items-center space-x-2 mx-auto transition-colors"
+                >
+                  <Icons.Plus />
+                  <span>新增許願</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* 設定彈窗 */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <h3 className="text-xl font-bold mb-6">Steam 帳號設定</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {[1, 2, 3, 4].map(num => (
-                <div key={num} className="space-y-2">
-                  <label className="block text-sm font-medium">帳號 #{num} 名稱</label>
-                  <input
-                    type="text"
-                    value={steamConfig.accountNames[num - 1]}
-                    onChange={(e) => {
-                      const newNames = [...steamConfig.accountNames];
-                      newNames[num - 1] = e.target.value;
-                      setSteamConfig({...steamConfig, accountNames: newNames});
-                    }}
-                    className="w-full bg-gray-700 border border-gray-600 rounded p-2"
-                  />
-                  <label className="block text-sm font-medium">Steam ID</label>
-                  <input
-                    type="text"
-                    value={steamConfig.steamIds[num - 1]}
-                    onChange={(e) => {
-                      const newIds = [...steamConfig.steamIds];
-                      newIds[num - 1] = e.target.value;
-                      setSteamConfig({...steamConfig, steamIds: newIds});
-                    }}
-                    placeholder="76561198xxxxxxxxx"
-                    className="w-full bg-gray-700 border border-gray-600 rounded p-2"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={saveSteamConfig}
-                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
-              >
-                儲存設定
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold">Steam API 設定</h3>
               <button
                 onClick={() => setShowSettings(false)}
-                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
+                className="text-gray-400 hover:text-white"
               >
-                關閉
+                <Icons.X />
               </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* API Key 設定 */}
+              <div>
+                <label className="block text-lg font-semibold mb-3">Steam Web API 密鑰</label>
+                <input
+                  type="password"
+                  value={steamConfig.apiKey}
+                  onChange={(e) => setSteamConfig({...steamConfig, apiKey: e.target.value})}
+                  placeholder="請輸入Steam API Key"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="mt-2 p-3 bg-blue-600 bg-opacity-20 border border-blue-600 rounded-lg">
+                  <p className="text-blue-200 text-sm">
+                    <strong>如何獲取 Steam API Key：</strong>
+                  </p>
+                  <ol className="text-blue-200 text-sm mt-1 space-y-1">
+                    <li>1. 前往 <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">Steam API註冊頁面 <Icons.ExternalLink className="inline" /></a></li>
+                    <li>2. 登入你的Steam帳號</li>
+                    <li>3. 域名填入：<code className="bg-blue-800 px-1 rounded">bless25min.github.io</code></li>
+                    <li>4. 複製生成的API Key</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Steam ID 設定 */}
+              <div>
+                <label className="block text-lg font-semibold mb-3">Steam 帳號設定</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2, 3, 4].map(num => (
+                    <div key={num} className="space-y-3 p-4 bg-gray-700 rounded-lg">
+                      <h4 className="font-medium text-gray-300">帳號 #{num}</h4>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">帳號名稱</label>
+                        <input
+                          type="text"
+                          value={steamConfig.accountNames[num - 1]}
+                          onChange={(e) => {
+                            const newNames = [...steamConfig.accountNames];
+                            newNames[num - 1] = e.target.value;
+                            setSteamConfig({...steamConfig, accountNames: newNames});
+                          }}
+                          className="w-full bg-gray-600 border border-gray-500 rounded p-2 focus:ring-2 focus:ring-blue-500"
+                          placeholder={`帳號${num}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Steam ID</label>
+                        <input
+                          type="text"
+                          value={steamConfig.steamIds[num - 1]}
+                          onChange={(e) => {
+                            const newIds = [...steamConfig.steamIds];
+                            newIds[num - 1] = e.target.value;
+                            setSteamConfig({...steamConfig, steamIds: newIds});
+                          }}
+                          placeholder="76561198xxxxxxxxx"
+                          className="w-full bg-gray-600 border border-gray-500 rounded p-2 focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="mt-4 p-3 bg-yellow-600 bg-opacity-20 border border-yellow-600 rounded-lg">
+                  <p className="text-yellow-200 text-sm">
+                    <strong>如何獲取 Steam ID：</strong>
+                  </p>
+                  <ol className="text-yellow-200 text-sm mt-1 space-y-1">
+                    <li>1. 前往 <a href="https://steamid.io/" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">SteamID.io <Icons.ExternalLink className="inline" /></a></li>
+                    <li>2. 輸入Steam個人檔案URL或用戶名</li>
+                    <li>3. 複製「steamID64」的數字</li>
+                    <li>4. 確保Steam個人檔案的遊戲詳情設為「公開」</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="bg-gray-600 hover:bg-gray-700 px-6 py-2 rounded-lg transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={saveSteamConfig}
+                  className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg transition-colors"
+                >
+                  儲存設定
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -547,41 +698,49 @@ function App() {
 
       {/* 許願表單 */}
       {showWishForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">新增遊戲許願</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">新增遊戲許願</h3>
+              <button
+                onClick={() => setShowWishForm(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <Icons.X />
+              </button>
+            </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">遊戲名稱</label>
+                <label className="block text-sm font-medium mb-2">遊戲名稱 *</label>
                 <input
                   type="text"
                   value={newWish.name}
                   onChange={(e) => setNewWish({...newWish, name: e.target.value})}
                   placeholder="輸入想要的遊戲名稱..."
-                  className="w-full bg-gray-700 border border-gray-600 rounded p-2"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">許願理由</label>
+                <label className="block text-sm font-medium mb-2">許願理由（選填）</label>
                 <textarea
                   value={newWish.reason}
                   onChange={(e) => setNewWish({...newWish, reason: e.target.value})}
-                  placeholder="為什麼想要這款遊戲？（選填）"
-                  className="w-full bg-gray-700 border border-gray-600 rounded p-2 h-20"
+                  placeholder="為什麼想要這款遊戲？"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 h-24 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
               </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={addWish}
-                  className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded"
-                >
-                  提交許願
-                </button>
+              <div className="flex space-x-3 pt-4">
                 <button
                   onClick={() => setShowWishForm(false)}
-                  className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 py-3 rounded-lg transition-colors"
                 >
                   取消
+                </button>
+                <button
+                  onClick={addWish}
+                  className="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-lg transition-colors"
+                >
+                  新增許願
                 </button>
               </div>
             </div>
