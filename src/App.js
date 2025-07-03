@@ -1,4 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase 設定
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // CSS 樣式
 const styles = `
@@ -53,9 +59,14 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
     </svg>
   ),
-  AlertCircle: () => (
+  Users: () => (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+    </svg>
+  ),
+  User: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
     </svg>
   ),
   ExternalLink: () => (
@@ -72,133 +83,237 @@ const Icons = {
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
     </svg>
+  ),
+  Edit: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+    </svg>
+  ),
+  Trash: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
   )
 };
 
 function App() {
   // 基本狀態
-  const [activeTab, setActiveTab] = useState('library');
-  const [showSettings, setShowSettings] = useState(false);
-  const [showWishForm, setShowWishForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('accounts');
+  const [currentUser, setCurrentUser] = useState('');
+  const [isUserSet, setIsUserSet] = useState(false);
   
-  // Steam設定
-  const [steamConfig, setSteamConfig] = useState({
-    apiKey: '',
-    steamIds: ['', '', '', ''],
-    accountNames: ['帳號1', '帳號2', '帳號3', '帳號4']
+  // 帳號管理
+  const [steamAccounts, setSteamAccounts] = useState([]);
+  const [showAccountForm, setShowAccountForm] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [newAccount, setNewAccount] = useState({
+    account_name: '',
+    steam_id: '',
+    owner_name: ''
   });
-
+  
   // 遊戲數據
   const [gameLibrary, setGameLibrary] = useState([]);
+  const [gameDetails, setGameDetails] = useState({});
   const [wishlist, setWishlist] = useState([]);
   
   // UI狀態
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAccount, setSelectedAccount] = useState('all');
-  const [sortBy, setSortBy] = useState('name'); // name, playtime, accounts
-  const [sortOrder, setSortOrder] = useState('asc'); // asc, desc
-  const [minAccounts, setMinAccounts] = useState(1); // 最少帳號數篩選
+  const [selectedAccounts, setSelectedAccounts] = useState([]);
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [minAccounts, setMinAccounts] = useState(1);
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState('未同步');
   const [lastSync, setLastSync] = useState(null);
+  const [showWishForm, setShowWishForm] = useState(false);
   const [newWish, setNewWish] = useState({ name: '', reason: '' });
-  const [gameDetails, setGameDetails] = useState({}); // 存儲遊戲詳細資訊
+  
+  // Steam API設定
+  const [steamApiKey, setSteamApiKey] = useState('');
+  const [showApiKeyForm, setShowApiKeyForm] = useState(false);
 
-  // 獲取Steam遊戲詳細資訊
-  const fetchGameDetails = async (appId) => {
-    if (gameDetails[appId]) return gameDetails[appId]; // 已有快取
-
-    try {
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const storeApiUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=tchinese`;
-      
-      const response = await fetch(proxyUrl + encodeURIComponent(storeApiUrl));
-      if (!response.ok) throw new Error('無法獲取遊戲資訊');
-      
-      const data = await response.json();
-      const gameData = data[appId];
-      
-      if (gameData && gameData.success && gameData.data) {
-        const details = {
-          short_description: gameData.data.short_description || '暫無描述',
-          genres: gameData.data.genres || [],
-          developers: gameData.data.developers || [],
-          publishers: gameData.data.publishers || [],
-          release_date: gameData.data.release_date || {},
-          price_overview: gameData.data.price_overview || null,
-          categories: gameData.data.categories || [],
-          screenshots: gameData.data.screenshots || []
-        };
-        
-        setGameDetails(prev => ({ ...prev, [appId]: details }));
-        return details;
-      }
-    } catch (error) {
-      console.error(`獲取遊戲 ${appId} 詳細資訊失敗:`, error);
-    }
-    return null;
-  };
-
-  // 批量獲取遊戲詳細資訊
-  const batchFetchGameDetails = async (games) => {
-    setSyncStatus('獲取遊戲詳細資訊...');
-    const batchSize = 5; // 每批處理5個遊戲，避免API限制
-    
-    for (let i = 0; i < games.length; i += batchSize) {
-      const batch = games.slice(i, i + batchSize);
-      const promises = batch.map(game => fetchGameDetails(game.id));
-      
-      await Promise.allSettled(promises);
-      
-      // 添加延遲避免API限制
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setSyncStatus(`獲取遊戲資訊... ${Math.min(i + batchSize, games.length)}/${games.length}`);
-    }
-    
-    setSyncStatus('同步成功');
-  };
+  // 初始化
   useEffect(() => {
-    const savedConfig = localStorage.getItem('steamConfig');
-    if (savedConfig) {
-      setSteamConfig(JSON.parse(savedConfig));
+    // 檢查用戶名稱
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      setCurrentUser(savedUser);
+      setIsUserSet(true);
     }
 
-    const savedGames = localStorage.getItem('gameLibrary');
-    if (savedGames) {
-      setGameLibrary(JSON.parse(savedGames));
+    // 載入API Key
+    const savedApiKey = localStorage.getItem('steamApiKey');
+    if (savedApiKey) {
+      setSteamApiKey(savedApiKey);
     }
 
-    const savedWishes = localStorage.getItem('wishlist');
-    if (savedWishes) {
-      setWishlist(JSON.parse(savedWishes));
-    }
-
-    const savedSync = localStorage.getItem('lastSync');
-    if (savedSync) {
-      setLastSync(new Date(savedSync));
-      setSyncStatus('已同步');
+    if (savedUser) {
+      loadAllData();
     }
   }, []);
 
-  // 儲存Steam設定
-  const saveSteamConfig = () => {
-    localStorage.setItem('steamConfig', JSON.stringify(steamConfig));
-    setShowSettings(false);
-    alert('設定已儲存！');
+  // 載入所有數據
+  const loadAllData = async () => {
+    try {
+      await Promise.all([
+        loadSteamAccounts(),
+        loadGameLibrary(),
+        loadGameDetails(),
+        loadWishlist()
+      ]);
+    } catch (error) {
+      console.error('載入數據失敗:', error);
+    }
   };
 
-  // 真實Steam API同步
-  const syncSteamGames = async () => {
-    if (!steamConfig.apiKey) {
-      alert('請先設定Steam API密鑰');
-      setShowSettings(true);
+  // 載入Steam帳號
+  const loadSteamAccounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('steam_accounts')
+        .select('*')
+        .order('created_at');
+
+      if (error) throw error;
+      setSteamAccounts(data || []);
+    } catch (error) {
+      console.error('載入Steam帳號失敗:', error);
+    }
+  };
+
+  // 載入遊戲庫存
+  const loadGameLibrary = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('steam_games')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setGameLibrary(data || []);
+    } catch (error) {
+      console.error('載入遊戲庫存失敗:', error);
+    }
+  };
+
+  // 載入遊戲詳情
+  const loadGameDetails = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('game_details')
+        .select('*');
+
+      if (error) throw error;
+      
+      const detailsMap = {};
+      data?.forEach(detail => {
+        detailsMap[detail.app_id] = detail;
+      });
+      setGameDetails(detailsMap);
+    } catch (error) {
+      console.error('載入遊戲詳情失敗:', error);
+    }
+  };
+
+  // 載入許願清單
+  const loadWishlist = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('wishlists')
+        .select('*')
+        .order('votes', { ascending: false });
+
+      if (error) throw error;
+      setWishlist(data || []);
+    } catch (error) {
+      console.error('載入許願清單失敗:', error);
+    }
+  };
+
+  // 設定用戶名稱
+  const setUserName = () => {
+    if (!currentUser.trim()) {
+      alert('請輸入用戶名稱');
+      return;
+    }
+    localStorage.setItem('currentUser', currentUser);
+    setIsUserSet(true);
+    loadAllData();
+  };
+
+  // 新增Steam帳號
+  const addSteamAccount = async () => {
+    if (!newAccount.account_name || !newAccount.steam_id) {
+      alert('請填寫帳號名稱和Steam ID');
       return;
     }
 
-    if (!steamConfig.steamIds.some(id => id.trim())) {
-      alert('請至少設定一個Steam ID');
-      setShowSettings(true);
+    try {
+      const accountData = {
+        ...newAccount,
+        owner_name: newAccount.owner_name || currentUser
+      };
+
+      let result;
+      if (editingAccount) {
+        // 更新現有帳號
+        result = await supabase
+          .from('steam_accounts')
+          .update(accountData)
+          .eq('id', editingAccount.id);
+      } else {
+        // 新增帳號
+        result = await supabase
+          .from('steam_accounts')
+          .insert([accountData]);
+      }
+
+      if (result.error) throw result.error;
+
+      await loadSteamAccounts();
+      setNewAccount({ account_name: '', steam_id: '', owner_name: '' });
+      setShowAccountForm(false);
+      setEditingAccount(null);
+      
+      alert(editingAccount ? '帳號更新成功！' : '帳號新增成功！');
+    } catch (error) {
+      console.error('操作帳號失敗:', error);
+      alert('操作失敗: ' + error.message);
+    }
+  };
+
+  // 刪除Steam帳號
+  const deleteSteamAccount = async (accountId) => {
+    if (!window.confirm('確定要刪除這個帳號嗎？')) return;
+
+    try {
+      const { error } = await supabase
+        .from('steam_accounts')
+        .delete()
+        .eq('id', accountId);
+
+      if (error) throw error;
+
+      await loadSteamAccounts();
+      alert('帳號刪除成功！');
+    } catch (error) {
+      console.error('刪除帳號失敗:', error);
+      alert('刪除失敗: ' + error.message);
+    }
+  };
+
+  // 同步Steam遊戲
+  const syncSteamGames = async () => {
+    if (!steamApiKey) {
+      alert('請先設定Steam API Key');
+      setShowApiKeyForm(true);
+      return;
+    }
+
+    if (steamAccounts.length === 0) {
+      alert('請先新增Steam帳號');
+      setShowAccountForm(true);
       return;
     }
 
@@ -210,105 +325,86 @@ function App() {
       let successCount = 0;
       let errors = [];
 
-      // 為每個設定的Steam ID獲取遊戲
-      for (let i = 0; i < steamConfig.steamIds.length; i++) {
-        const steamId = steamConfig.steamIds[i].trim();
-        if (!steamId) continue;
-
-        const accountIndex = i + 1;
-        setSyncStatus(`同步中... 正在處理${steamConfig.accountNames[i]}`);
+      for (const account of steamAccounts) {
+        setSyncStatus(`同步中... 正在處理 ${account.account_name}`);
 
         try {
-          // 使用CORS代理來避免瀏覽器限制
           const proxyUrl = 'https://api.allorigins.win/raw?url=';
-          const steamApiUrl = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${steamConfig.apiKey}&steamid=${steamId}&format=json&include_appinfo=true&include_played_free_games=true`;
+          const steamApiUrl = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${steamApiKey}&steamid=${account.steam_id}&format=json&include_appinfo=true&include_played_free_games=true`;
           
           const response = await fetch(proxyUrl + encodeURIComponent(steamApiUrl));
-          
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: 無法連接Steam API`);
-          }
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
           const data = await response.json();
-          
-          if (!data.response) {
-            throw new Error('Steam API 回應格式錯誤');
-          }
-
-          if (!data.response.games) {
-            errors.push(`${steamConfig.accountNames[i]}: 沒有遊戲資料或帳號隱私設定不允許存取`);
+          if (!data.response?.games) {
+            errors.push(`${account.account_name}: 沒有遊戲資料或隱私設定不允許`);
             continue;
           }
 
           // 處理遊戲資料
           data.response.games.forEach(game => {
             const gameId = game.appid;
-            const playtimeMinutes = game.playtime_forever || 0;
-            
             if (gameMap.has(gameId)) {
-              // 遊戲已存在，添加帳號和累加遊戲時間
-              const existingGame = gameMap.get(gameId);
-              if (!existingGame.accounts.includes(accountIndex)) {
-                existingGame.accounts.push(accountIndex);
+              const existing = gameMap.get(gameId);
+              if (!existing.accounts.includes(account.id)) {
+                existing.accounts.push(account.id);
               }
-              existingGame.totalPlaytime += playtimeMinutes;
+              existing.total_playtime += (game.playtime_forever || 0);
             } else {
-              // 新遊戲
               gameMap.set(gameId, {
-                id: gameId,
+                app_id: gameId,
                 name: game.name || '未知遊戲',
-                accounts: [accountIndex],
-                playtime: Math.floor(playtimeMinutes / 60), // 轉換為小時
-                totalPlaytime: playtimeMinutes,
-                rating: 0, // Steam API 不提供評分
-                genre: '待分類',
-                price: '待查詢',
-                tags: [],
+                accounts: [account.id],
+                playtime: Math.floor((game.playtime_forever || 0) / 60),
+                total_playtime: game.playtime_forever || 0,
                 img_icon_url: game.img_icon_url
               });
             }
           });
 
           successCount++;
+          await new Promise(resolve => setTimeout(resolve, 500));
           
         } catch (error) {
-          console.error(`帳號 ${accountIndex} 同步失敗:`, error);
-          errors.push(`${steamConfig.accountNames[i]}: ${error.message}`);
+          errors.push(`${account.account_name}: ${error.message}`);
         }
-
-        // 添加延遲以避免API限制
-        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      // 轉換為陣列並排序
-      const gamesArray = Array.from(gameMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      // 保存到資料庫
+      const gamesArray = Array.from(gameMap.values());
       
-      setGameLibrary(gamesArray);
-      localStorage.setItem('gameLibrary', JSON.stringify(gamesArray));
+      // 清除舊資料
+      await supabase.from('steam_games').delete().neq('app_id', 0);
       
-      const now = new Date();
-      setLastSync(now);
-      localStorage.setItem('lastSync', now.toISOString());
+      // 插入新資料
+      if (gamesArray.length > 0) {
+        const { error } = await supabase
+          .from('steam_games')
+          .insert(gamesArray);
+        
+        if (error) throw error;
+      }
+
+      await loadGameLibrary();
+      setLastSync(new Date());
       
-      // 設定狀態訊息
       if (successCount === 0) {
         setSyncStatus('同步失敗');
         alert('所有帳號同步失敗:\n' + errors.join('\n'));
       } else if (errors.length > 0) {
-        setSyncStatus(`部分成功 (${successCount}/${steamConfig.steamIds.filter(id => id.trim()).length})`);
-        alert(`同步完成！\n成功: ${successCount} 個帳號\n錯誤: ${errors.length} 個帳號\n\n錯誤詳情:\n${errors.join('\n')}`);
+        setSyncStatus(`部分成功 (${successCount}/${steamAccounts.length})`);
+        alert(`同步完成！\n成功: ${successCount} 個帳號\n錯誤: ${errors.length} 個帳號\n\n獲得 ${gamesArray.length} 款遊戲`);
       } else {
         setSyncStatus('同步成功');
         alert(`同步成功！獲得 ${gamesArray.length} 款遊戲`);
       }
 
-      // 異步獲取遊戲詳細資訊
+      // 開始獲取遊戲詳情
       if (gamesArray.length > 0) {
         setTimeout(() => batchFetchGameDetails(gamesArray), 1000);
       }
-      
+
     } catch (error) {
-      console.error('同步過程發生錯誤:', error);
       setSyncStatus('同步失敗');
       alert('同步失敗: ' + error.message);
     } finally {
@@ -316,61 +412,124 @@ function App() {
     }
   };
 
+  // 獲取遊戲詳情
+  const batchFetchGameDetails = async (games) => {
+    setSyncStatus('獲取遊戲詳細資訊...');
+    const batchSize = 3;
+    let processedCount = 0;
+
+    for (let i = 0; i < games.length; i += batchSize) {
+      const batch = games.slice(i, i + batchSize);
+      
+      const promises = batch.map(async (game) => {
+        if (!gameDetails[game.app_id]) {
+          const details = await fetchGameDetails(game.app_id);
+          if (details) {
+            await supabase
+              .from('game_details')
+              .upsert({ app_id: game.app_id, ...details });
+          }
+        }
+        processedCount++;
+      });
+      
+      await Promise.allSettled(promises);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setSyncStatus(`獲取遊戲資訊... ${Math.min(processedCount, games.length)}/${games.length}`);
+    }
+    
+    await loadGameDetails();
+    setSyncStatus('同步成功');
+  };
+
+  // 獲取單個遊戲詳情
+  const fetchGameDetails = async (appId) => {
+    try {
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const storeApiUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=tchinese`;
+      
+      const response = await fetch(proxyUrl + encodeURIComponent(storeApiUrl));
+      if (!response.ok) throw new Error('無法獲取遊戲資訊');
+      
+      const data = await response.json();
+      const gameData = data[appId];
+      
+      if (gameData?.success && gameData.data) {
+        return {
+          short_description: gameData.data.short_description || '暫無描述',
+          genres: gameData.data.genres || [],
+          developers: gameData.data.developers || [],
+          publishers: gameData.data.publishers || [],
+          release_date: gameData.data.release_date || {},
+          price_overview: gameData.data.price_overview || null,
+          categories: gameData.data.categories || []
+        };
+      }
+    } catch (error) {
+      console.error(`獲取遊戲 ${appId} 詳細資訊失敗:`, error);
+    }
+    return null;
+  };
+
   // 新增許願
-  const addWish = () => {
+  const addWish = async () => {
     if (!newWish.name.trim()) {
       alert('請輸入遊戲名稱');
       return;
     }
 
-    const wish = {
-      id: Date.now(),
-      name: newWish.name,
-      reason: newWish.reason,
-      votes: 1,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const wishData = {
+        game_name: newWish.name,
+        reason: newWish.reason,
+        requested_by: currentUser,
+        votes: 1,
+        status: 'pending'
+      };
 
-    const updatedWishlist = [wish, ...wishlist];
-    setWishlist(updatedWishlist);
-    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
-    
-    setNewWish({ name: '', reason: '' });
-    setShowWishForm(false);
+      const { error } = await supabase
+        .from('wishlists')
+        .insert([wishData]);
+
+      if (error) throw error;
+
+      await loadWishlist();
+      setNewWish({ name: '', reason: '' });
+      setShowWishForm(false);
+    } catch (error) {
+      alert('新增許願失敗: ' + error.message);
+    }
   };
 
-  // 投票
-  const voteWish = (wishId) => {
-    const updatedWishlist = wishlist.map(wish => 
-      wish.id === wishId ? { ...wish, votes: wish.votes + 1 } : wish
-    );
-    setWishlist(updatedWishlist);
-    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
-  };
+  // 投票許願
+  const voteWish = async (wishId) => {
+    try {
+      const wish = wishlist.find(w => w.id === wishId);
+      const { error } = await supabase
+        .from('wishlists')
+        .update({ votes: wish.votes + 1 })
+        .eq('id', wishId);
 
-  // 刪除許願
-  const deleteWish = (wishId) => {
-    const updatedWishlist = wishlist.filter(wish => wish.id !== wishId);
-    setWishlist(updatedWishlist);
-    localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
+      if (error) throw error;
+      await loadWishlist();
+    } catch (error) {
+      alert('投票失敗: ' + error.message);
+    }
   };
 
   // 篩選和排序遊戲
   const filteredAndSortedGames = () => {
     let filtered = gameLibrary.filter(game => {
-      const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           game.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesAccount = selectedAccount === 'all' || game.accounts.includes(parseInt(selectedAccount));
+      const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesAccounts = selectedAccounts.length === 0 || 
+                             selectedAccounts.every(accId => game.accounts.includes(accId));
       const matchesMinAccounts = game.accounts.length >= minAccounts;
       
-      return matchesSearch && matchesAccount && matchesMinAccounts;
+      return matchesSearch && matchesAccounts && matchesMinAccounts;
     });
 
-    // 排序
     filtered.sort((a, b) => {
       let comparison = 0;
-      
       switch (sortBy) {
         case 'name':
           comparison = a.name.localeCompare(b.name);
@@ -384,7 +543,6 @@ function App() {
         default:
           comparison = 0;
       }
-      
       return sortOrder === 'desc' ? -comparison : comparison;
     });
 
@@ -395,12 +553,34 @@ function App() {
 
   // 統計數據
   const totalGames = gameLibrary.length;
-  const accountGameCounts = [1, 2, 3, 4].map(acc => ({
-    account: acc,
-    count: gameLibrary.filter(game => game.accounts.includes(acc)).length
-  }));
+  const totalAccounts = steamAccounts.length;
 
-  const isConfigured = steamConfig.apiKey && steamConfig.steamIds.some(id => id.trim());
+  if (!isUserSet) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="bg-gray-800 rounded-lg p-8 w-full max-w-md">
+          <h2 className="text-2xl font-bold mb-6 text-center">歡迎使用Steam遊戲庫存系統</h2>
+          <p className="text-gray-400 mb-6 text-center">請輸入你的用戶名稱開始使用</p>
+          <div className="space-y-4">
+            <input
+              type="text"
+              value={currentUser}
+              onChange={(e) => setCurrentUser(e.target.value)}
+              placeholder="輸入你的用戶名稱..."
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+              onKeyPress={(e) => e.key === 'Enter' && setUserName()}
+            />
+            <button
+              onClick={setUserName}
+              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition-colors"
+            >
+              開始使用
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -413,19 +593,19 @@ function App() {
                 S
               </div>
               <div>
-                <h1 className="text-xl font-bold">Steam 遊戲庫存管理</h1>
-                <p className="text-sm text-gray-400">簡化版 - 無需登入 • 本地存儲</p>
+                <h1 className="text-xl font-bold">Steam 多用戶共享系統</h1>
+                <p className="text-sm text-gray-400">Supabase版 • 用戶: {currentUser}</p>
               </div>
             </div>
             
             <div className="flex items-center space-x-3">
               <span className="text-sm text-gray-300">
-                {lastSync ? `最後同步: ${lastSync.toLocaleString('zh-TW')}` : '尚未同步'}
+                {totalAccounts} 個帳號 • {totalGames} 款遊戲
               </span>
               <button
-                onClick={() => setShowSettings(true)}
+                onClick={() => setShowApiKeyForm(true)}
                 className="bg-gray-600 hover:bg-gray-700 p-2 rounded-lg transition-colors"
-                title="設定"
+                title="Steam API設定"
               >
                 <Icons.Settings />
               </button>
@@ -434,26 +614,20 @@ function App() {
         </div>
       </div>
 
-      {/* 設定提醒 */}
-      {!isConfigured && (
-        <div className="bg-blue-600 text-blue-100 px-4 py-3 text-center">
-          <div className="flex items-center justify-center space-x-2">
-            <Icons.AlertCircle />
-            <span>請先設定Steam API密鑰和Steam ID以開始使用</span>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="underline hover:no-underline font-semibold"
-            >
-              立即設定
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 主要內容 */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* 標籤頁 */}
         <div className="flex space-x-1 mb-6 bg-gray-800 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setActiveTab('accounts')}
+            className={`px-6 py-3 rounded-md transition-colors ${
+              activeTab === 'accounts' 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+            }`}
+          >
+            帳號管理 ({totalAccounts})
+          </button>
           <button
             onClick={() => setActiveTab('library')}
             className={`px-6 py-3 rounded-md transition-colors ${
@@ -476,77 +650,137 @@ function App() {
           </button>
         </div>
 
-        {/* 遊戲庫存頁面 */}
-        {activeTab === 'library' && (
+        {/* 帳號管理頁面 */}
+        {activeTab === 'accounts' && (
           <div>
-            {/* 統計面板 */}
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-sm font-medium text-gray-400 mb-1">總遊戲數</h3>
-                <p className="text-2xl font-bold text-blue-400">{totalGames}</p>
-                {filteredGames.length !== totalGames && (
-                  <p className="text-xs text-gray-500">篩選後: {filteredGames.length}</p>
-                )}
-              </div>
-              {accountGameCounts.map(acc => (
-                <div key={acc.account} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                  <h3 className="text-sm font-medium text-gray-400 mb-1">{steamConfig.accountNames[acc.account - 1]}</h3>
-                  <p className="text-2xl font-bold text-green-400">{acc.count}</p>
-                </div>
-              ))}
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-sm font-medium text-gray-400 mb-1">同步狀態</h3>
-                <p className={`text-xs font-bold ${
-                  syncStatus.includes('成功') ? 'text-green-400' :
-                  syncStatus.includes('失敗') ? 'text-red-400' :
-                  'text-yellow-400'
-                }`}>
-                  {syncStatus}
-                </p>
-              </div>
-            </div>
-
-            {/* 控制面板 */}
-            <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">控制面板</h3>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">Steam 帳號管理</h2>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowAccountForm(true)}
+                  className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <Icons.Plus />
+                  <span>新增帳號</span>
+                </button>
                 <button
                   onClick={syncSteamGames}
-                  disabled={loading || !isConfigured}
+                  disabled={loading || !steamApiKey}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
-                    loading || !isConfigured
+                    loading || !steamApiKey
                       ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                       : 'bg-blue-600 hover:bg-blue-700'
                   }`}
                 >
                   <Icons.RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  <span>{loading ? '同步中...' : '同步Steam遊戲'}</span>
+                  <span>{loading ? '同步中...' : '同步所有帳號'}</span>
                 </button>
               </div>
+            </div>
 
+            {/* 同步狀態 */}
+            {syncStatus !== '未同步' && (
+              <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-semibold">同步狀態</span>
+                  <span className={`text-sm font-bold ${
+                    syncStatus.includes('成功') ? 'text-green-400' :
+                    syncStatus.includes('失敗') ? 'text-red-400' :
+                    'text-yellow-400'
+                  }`}>
+                    {syncStatus}
+                  </span>
+                </div>
+                {lastSync && (
+                  <p className="text-sm text-gray-400 mt-1">
+                    最後同步: {lastSync.toLocaleString('zh-TW')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 帳號列表 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {steamAccounts.map(account => (
+                <div key={account.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">{account.account_name}</h3>
+                      <p className="text-sm text-gray-400">擁有者: {account.owner_name}</p>
+                      <p className="text-xs text-gray-500 font-mono">ID: {account.steam_id}</p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => {
+                          setEditingAccount(account);
+                          setNewAccount({
+                            account_name: account.account_name,
+                            steam_id: account.steam_id,
+                            owner_name: account.owner_name
+                          });
+                          setShowAccountForm(true);
+                        }}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        <Icons.Edit />
+                      </button>
+                      <button
+                        onClick={() => deleteSteamAccount(account.id)}
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        <Icons.Trash />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="text-sm text-gray-300">
+                    <div className="flex justify-between">
+                      <span>遊戲數量:</span>
+                      <span>{gameLibrary.filter(game => game.accounts.includes(account.id)).length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>新增時間:</span>
+                      <span>{new Date(account.created_at).toLocaleDateString('zh-TW')}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {steamAccounts.length === 0 && (
+              <div className="text-center py-12">
+                <Icons.Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-400 text-lg mb-2">還沒有Steam帳號</p>
+                <p className="text-gray-500 mb-4">新增第一個Steam帳號開始使用</p>
+                <button
+                  onClick={() => setShowAccountForm(true)}
+                  className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg flex items-center space-x-2 mx-auto transition-colors"
+                >
+                  <Icons.Plus />
+                  <span>新增Steam帳號</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 遊戲庫存頁面 */}
+        {activeTab === 'library' && (
+          <div>
+            {/* 篩選控制 */}
+            <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="relative">
                   <Icons.Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="搜尋遊戲名稱或標籤..."
+                    placeholder="搜尋遊戲..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 
-                <select
-                  value={selectedAccount}
-                  onChange={(e) => setSelectedAccount(e.target.value)}
-                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="all">所有帳號</option>
-                  {steamConfig.accountNames.map((name, index) => (
-                    <option key={index + 1} value={index + 1}>{name}</option>
-                  ))}
-                </select>
-
                 <select
                   value={`${sortBy}-${sortOrder}`}
                   onChange={(e) => {
@@ -554,7 +788,7 @@ function App() {
                     setSortBy(newSortBy);
                     setSortOrder(newSortOrder);
                   }}
-                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="name-asc">名稱 A-Z</option>
                   <option value="name-desc">名稱 Z-A</option>
@@ -567,63 +801,58 @@ function App() {
                 <select
                   value={minAccounts}
                   onChange={(e) => setMinAccounts(parseInt(e.target.value))}
-                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
                 >
                   <option value={1}>至少1個帳號擁有</option>
                   <option value={2}>至少2個帳號擁有</option>
                   <option value={3}>至少3個帳號擁有</option>
-                  <option value={4}>4個帳號都擁有</option>
+                  <option value={Math.max(1, steamAccounts.length)}>所有帳號都擁有</option>
                 </select>
+
+                <div className="text-sm text-gray-400 flex items-center">
+                  顯示 {filteredGames.length} / {totalGames} 款遊戲
+                </div>
               </div>
             </div>
 
             {/* 遊戲列表 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredGames.map(game => {
-                const details = gameDetails[game.id];
+                const details = gameDetails[game.app_id];
+                const gameAccounts = steamAccounts.filter(acc => game.accounts.includes(acc.id));
+                
                 return (
-                  <div key={game.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-gray-600 transition-all transform hover:scale-105">
+                  <div key={game.app_id} className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-gray-600 transition-all transform hover:scale-105">
                     <div className="flex items-start space-x-4 mb-3">
                       {game.img_icon_url && (
                         <img
-                          src={`https://media.steampowered.com/steamcommunity/public/images/apps/${game.id}/${game.img_icon_url}.jpg`}
+                          src={`https://media.steampowered.com/steamcommunity/public/images/apps/${game.app_id}/${game.img_icon_url}.jpg`}
                           alt={game.name}
                           className="w-12 h-12 rounded bg-gray-700"
                           onError={(e) => e.target.style.display = 'none'}
                         />
                       )}
                       <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <a
-                            href={`https://store.steampowered.com/app/${game.id}/`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-lg font-semibold text-blue-400 hover:text-blue-300 line-clamp-2 transition-colors"
-                          >
-                            {game.name}
-                            <Icons.ExternalLink className="inline ml-1 w-4 h-4" />
-                          </a>
-                          {game.rating > 0 && (
-                            <div className="flex items-center space-x-1 text-yellow-400">
-                              <Icons.Star />
-                              <span className="text-sm">{game.rating}</span>
-                            </div>
-                          )}
-                        </div>
+                        <a
+                          href={`https://store.steampowered.com/app/${game.app_id}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-lg font-semibold text-blue-400 hover:text-blue-300 line-clamp-2 transition-colors"
+                        >
+                          {game.name}
+                          <Icons.ExternalLink className="inline ml-1 w-4 h-4" />
+                        </a>
                       </div>
                     </div>
 
-                    {/* 遊戲描述 */}
-                    {details && details.short_description && (
+                    {details?.short_description && (
                       <div className="mb-3">
                         <p className="text-sm text-gray-300 line-clamp-3">{details.short_description}</p>
                       </div>
                     )}
 
-                    {/* 遊戲類型 */}
-                    {details && details.genres && details.genres.length > 0 && (
+                    {details?.genres && details.genres.length > 0 && (
                       <div className="mb-3">
-                        <div className="text-xs text-gray-400 mb-1">類型：</div>
                         <div className="flex flex-wrap gap-1">
                           {details.genres.slice(0, 3).map(genre => (
                             <span key={genre.id} className="bg-purple-600 text-purple-100 px-2 py-1 rounded text-xs">
@@ -640,21 +869,14 @@ function App() {
                         <span className="text-gray-300">{game.playtime}小時</span>
                       </div>
                       
-                      {details && details.developers && details.developers.length > 0 && (
+                      {details?.developers && details.developers.length > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-400">開發商：</span>
                           <span className="text-gray-300 text-right">{details.developers[0]}</span>
                         </div>
                       )}
-                      
-                      {details && details.release_date && details.release_date.date && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">發行日期：</span>
-                          <span className="text-gray-300">{details.release_date.date}</span>
-                        </div>
-                      )}
 
-                      {details && details.price_overview && (
+                      {details?.price_overview && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-400">價格：</span>
                           <span className="text-gray-300">{details.price_overview.final_formatted}</span>
@@ -662,74 +884,33 @@ function App() {
                       )}
                     </div>
 
-                    <div className="mb-4">
+                    <div>
                       <div className="text-sm text-gray-400 mb-2">
-                        可用帳號 ({game.accounts.length}/4)：
+                        可用帳號 ({gameAccounts.length}/{steamAccounts.length})：
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {game.accounts.map(acc => (
-                          <span key={acc} className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs">
-                            {steamConfig.accountNames[acc - 1]}
+                        {gameAccounts.map(acc => (
+                          <span key={acc.id} className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs">
+                            {acc.account_name}
                           </span>
                         ))}
                       </div>
                     </div>
-
-                    {/* 多人遊戲標籤 */}
-                    {details && details.categories && (
-                      <div className="mb-3">
-                        <div className="flex flex-wrap gap-1">
-                          {details.categories
-                            .filter(cat => cat.description.includes('Multi') || cat.description.includes('Co-op') || cat.description.includes('多人'))
-                            .slice(0, 2)
-                            .map(category => (
-                              <span key={category.id} className="bg-green-600 text-green-100 px-2 py-1 rounded text-xs">
-                                {category.description}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {game.tags && game.tags.length > 0 && (
-                      <div>
-                        <div className="text-sm text-gray-400 mb-2">標籤：</div>
-                        <div className="flex flex-wrap gap-1">
-                          {game.tags.map(tag => (
-                            <span key={tag} className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
             </div>
 
-            {gameLibrary.length === 0 && !loading && (
+            {filteredGames.length === 0 && totalGames > 0 && (
               <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icons.RefreshCw className="w-8 h-8 text-gray-400" />
-                </div>
-                <p className="text-gray-400 text-lg mb-2">尚未同步遊戲庫存</p>
-                <p className="text-gray-500 mb-4">設定Steam API後點擊「同步Steam遊戲」開始</p>
-                {!isConfigured && (
-                  <button
-                    onClick={() => setShowSettings(true)}
-                    className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg transition-colors"
-                  >
-                    開始設定
-                  </button>
-                )}
+                <p className="text-gray-400 text-lg">沒有找到符合條件的遊戲</p>
               </div>
             )}
 
-            {filteredGames.length === 0 && gameLibrary.length > 0 && (
+            {totalGames === 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-400 text-lg">沒有找到符合條件的遊戲</p>
-                <p className="text-gray-500">試試調整搜尋條件或帳號篩選</p>
+                <p className="text-gray-400 text-lg mb-2">還沒有遊戲資料</p>
+                <p className="text-gray-500">請先新增Steam帳號並同步遊戲庫存</p>
               </div>
             )}
           </div>
@@ -749,49 +930,40 @@ function App() {
               </button>
             </div>
 
-            {wishlist.length > 0 ? (
-              <div className="space-y-4">
-                {wishlist.map(wish => (
-                  <div key={wish.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-2">{wish.name}</h3>
-                        {wish.reason && (
-                          <p className="text-gray-400 mb-3">{wish.reason}</p>
-                        )}
-                        <div className="text-sm text-gray-500">
-                          {new Date(wish.createdAt).toLocaleDateString('zh-TW')}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-pink-400">{wish.votes}</div>
-                          <div className="text-xs text-gray-400">票</div>
-                        </div>
-                        <button
-                          onClick={() => voteWish(wish.id)}
-                          className="bg-pink-600 hover:bg-pink-700 p-2 rounded-lg transition-colors"
-                          title="投票支持"
-                        >
-                          <Icons.Heart />
-                        </button>
-                        <button
-                          onClick={() => deleteWish(wish.id)}
-                          className="bg-red-600 hover:bg-red-700 p-2 rounded-lg transition-colors"
-                          title="刪除"
-                        >
-                          <Icons.X />
-                        </button>
+            <div className="space-y-4">
+              {wishlist.map(wish => (
+                <div key={wish.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-2">{wish.game_name}</h3>
+                      {wish.reason && (
+                        <p className="text-gray-400 mb-3">{wish.reason}</p>
+                      )}
+                      <div className="text-sm text-gray-500">
+                        提案人: {wish.requested_by} • {new Date(wish.created_at).toLocaleDateString('zh-TW')}
                       </div>
                     </div>
+                    <div className="flex items-center space-x-3">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-pink-400">{wish.votes}</div>
+                        <div className="text-xs text-gray-400">票</div>
+                      </div>
+                      <button
+                        onClick={() => voteWish(wish.id)}
+                        className="bg-pink-600 hover:bg-pink-700 p-2 rounded-lg transition-colors"
+                        title="投票支持"
+                      >
+                        <Icons.Heart />
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icons.Heart className="w-8 h-8 text-gray-400" />
                 </div>
+              ))}
+            </div>
+
+            {wishlist.length === 0 && (
+              <div className="text-center py-12">
+                <Icons.Heart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-400 text-lg mb-2">還沒有許願遊戲</p>
                 <p className="text-gray-500 mb-4">新增第一個想要的遊戲吧！</p>
                 <button
@@ -807,108 +979,137 @@ function App() {
         )}
       </div>
 
-      {/* 設定彈窗 */}
-      {showSettings && (
+      {/* 帳號新增/編輯表單 */}
+      {showAccountForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold">Steam API 設定</h3>
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">{editingAccount ? '編輯帳號' : '新增Steam帳號'}</h3>
               <button
-                onClick={() => setShowSettings(false)}
+                onClick={() => {
+                  setShowAccountForm(false);
+                  setEditingAccount(null);
+                  setNewAccount({ account_name: '', steam_id: '', owner_name: '' });
+                }}
                 className="text-gray-400 hover:text-white"
               >
                 <Icons.X />
               </button>
             </div>
             
-            <div className="space-y-6">
-              {/* API Key 設定 */}
+            <div className="space-y-4">
               <div>
-                <label className="block text-lg font-semibold mb-3">Steam Web API 密鑰</label>
+                <label className="block text-sm font-medium mb-2">帳號名稱 *</label>
+                <input
+                  type="text"
+                  value={newAccount.account_name}
+                  onChange={(e) => setNewAccount({...newAccount, account_name: e.target.value})}
+                  placeholder="例如：主帳號、小號1..."
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">Steam ID *</label>
+                <input
+                  type="text"
+                  value={newAccount.steam_id}
+                  onChange={(e) => setNewAccount({...newAccount, steam_id: e.target.value})}
+                  placeholder="76561198xxxxxxxxx"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  前往 <a href="https://steamid.io/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">steamid.io</a> 查詢
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">擁有者名稱</label>
+                <input
+                  type="text"
+                  value={newAccount.owner_name}
+                  onChange={(e) => setNewAccount({...newAccount, owner_name: e.target.value})}
+                  placeholder={`留空將使用 "${currentUser}"`}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowAccountForm(false);
+                    setEditingAccount(null);
+                    setNewAccount({ account_name: '', steam_id: '', owner_name: '' });
+                  }}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 py-3 rounded-lg transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={addSteamAccount}
+                  className="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-lg transition-colors"
+                >
+                  {editingAccount ? '更新帳號' : '新增帳號'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Steam API Key 設定表單 */}
+      {showApiKeyForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">Steam API 設定</h3>
+              <button
+                onClick={() => setShowApiKeyForm(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <Icons.X />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Steam Web API Key</label>
                 <input
                   type="password"
-                  value={steamConfig.apiKey}
-                  onChange={(e) => setSteamConfig({...steamConfig, apiKey: e.target.value})}
+                  value={steamApiKey}
+                  onChange={(e) => setSteamApiKey(e.target.value)}
                   placeholder="請輸入Steam API Key"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
                 />
                 <div className="mt-2 p-3 bg-blue-600 bg-opacity-20 border border-blue-600 rounded-lg">
                   <p className="text-blue-200 text-sm">
-                    <strong>如何獲取 Steam API Key：</strong>
+                    <strong>獲取步驟：</strong>
                   </p>
                   <ol className="text-blue-200 text-sm mt-1 space-y-1">
-                    <li>1. 前往 <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">Steam API註冊頁面 <Icons.ExternalLink className="inline" /></a></li>
-                    <li>2. 登入你的Steam帳號</li>
+                    <li>1. 前往 <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener noreferrer" className="underline">Steam API頁面</a></li>
+                    <li>2. 登入Steam帳號</li>
                     <li>3. 域名填入：<code className="bg-blue-800 px-1 rounded">bless25min.github.io</code></li>
                     <li>4. 複製生成的API Key</li>
                   </ol>
                 </div>
               </div>
-
-              {/* Steam ID 設定 */}
-              <div>
-                <label className="block text-lg font-semibold mb-3">Steam 帳號設定</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[1, 2, 3, 4].map(num => (
-                    <div key={num} className="space-y-3 p-4 bg-gray-700 rounded-lg">
-                      <h4 className="font-medium text-gray-300">帳號 #{num}</h4>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">帳號名稱</label>
-                        <input
-                          type="text"
-                          value={steamConfig.accountNames[num - 1]}
-                          onChange={(e) => {
-                            const newNames = [...steamConfig.accountNames];
-                            newNames[num - 1] = e.target.value;
-                            setSteamConfig({...steamConfig, accountNames: newNames});
-                          }}
-                          className="w-full bg-gray-600 border border-gray-500 rounded p-2 focus:ring-2 focus:ring-blue-500"
-                          placeholder={`帳號${num}`}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Steam ID</label>
-                        <input
-                          type="text"
-                          value={steamConfig.steamIds[num - 1]}
-                          onChange={(e) => {
-                            const newIds = [...steamConfig.steamIds];
-                            newIds[num - 1] = e.target.value;
-                            setSteamConfig({...steamConfig, steamIds: newIds});
-                          }}
-                          placeholder="76561198xxxxxxxxx"
-                          className="w-full bg-gray-600 border border-gray-500 rounded p-2 focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="mt-4 p-3 bg-yellow-600 bg-opacity-20 border border-yellow-600 rounded-lg">
-                  <p className="text-yellow-200 text-sm">
-                    <strong>如何獲取 Steam ID：</strong>
-                  </p>
-                  <ol className="text-yellow-200 text-sm mt-1 space-y-1">
-                    <li>1. 前往 <a href="https://steamid.io/" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">SteamID.io <Icons.ExternalLink className="inline" /></a></li>
-                    <li>2. 輸入Steam個人檔案URL或用戶名</li>
-                    <li>3. 複製「steamID64」的數字</li>
-                    <li>4. 確保Steam個人檔案的遊戲詳情設為「公開」</li>
-                  </ol>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+              
+              <div className="flex space-x-3 pt-4">
                 <button
-                  onClick={() => setShowSettings(false)}
-                  className="bg-gray-600 hover:bg-gray-700 px-6 py-2 rounded-lg transition-colors"
+                  onClick={() => setShowApiKeyForm(false)}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 py-3 rounded-lg transition-colors"
                 >
                   取消
                 </button>
                 <button
-                  onClick={saveSteamConfig}
-                  className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg transition-colors"
+                  onClick={() => {
+                    localStorage.setItem('steamApiKey', steamApiKey);
+                    setShowApiKeyForm(false);
+                    alert('API Key 已儲存！');
+                  }}
+                  className="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-lg transition-colors"
                 >
-                  儲存設定
+                  儲存
                 </button>
               </div>
             </div>
@@ -929,6 +1130,7 @@ function App() {
                 <Icons.X />
               </button>
             </div>
+            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">遊戲名稱 *</label>
@@ -937,7 +1139,7 @@ function App() {
                   value={newWish.name}
                   onChange={(e) => setNewWish({...newWish, name: e.target.value})}
                   placeholder="輸入想要的遊戲名稱..."
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -946,7 +1148,7 @@ function App() {
                   value={newWish.reason}
                   onChange={(e) => setNewWish({...newWish, reason: e.target.value})}
                   placeholder="為什麼想要這款遊戲？"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 h-24 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 h-24 focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
               <div className="flex space-x-3 pt-4">
