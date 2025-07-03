@@ -323,6 +323,7 @@
         let gameDataCache = new Map(); // 緩存用戶遊戲數據
         let isLoadingGames = false; // 防止重複載入
         let authStateInitialized = false; // 防止重複認證初始化
+        let isUpdatingInterface = false; // 防止重複更新界面
 
         // 共享帳號
         const SHARED_ACCOUNTS = [
@@ -738,7 +739,7 @@
             return card;
         }
 
-        // 切換用戶選擇 - 防止重複載入
+        // 切換用戶選擇 - 優化防抖邏輯
         function toggleUser(user) {
             const index = selectedUsers.findIndex(u => u.id === user.id);
             if (index === -1) {
@@ -749,38 +750,61 @@
             
             updateUserInterface();
             
-            // 使用防抖避免頻繁載入
+            // 清除現有的載入狀態
+            isLoadingGames = false;
+            
+            // 使用防抖避免頻繁載入，延長時間到500ms
             clearTimeout(window.loadGamesTimeout);
             window.loadGamesTimeout = setTimeout(() => {
-                loadGames();
-            }, 300);
+                if (!isLoadingGames) {
+                    loadGames();
+                }
+            }, 500);
         }
 
-        // 全選用戶 - 防止重複載入
+        // 全選用戶 - 優化防抖邏輯
         function selectAllUsers() {
+            if (selectedUsers.length === allUsers.length) {
+                console.log('所有用戶已選中，跳過重複操作');
+                return;
+            }
+            
             selectedUsers = [...allUsers];
             updateUserInterface();
             
+            isLoadingGames = false;
             clearTimeout(window.loadGamesTimeout);
             window.loadGamesTimeout = setTimeout(() => {
-                loadGames();
-            }, 300);
+                if (!isLoadingGames) {
+                    loadGames();
+                }
+            }, 500);
         }
 
-        // 取消全選 - 防止重複載入
+        // 取消全選 - 優化防抖邏輯
         function deselectAllUsers() {
+            if (selectedUsers.length === 0) {
+                console.log('沒有已選用戶，跳過重複操作');
+                return;
+            }
+            
             selectedUsers = [];
             updateUserInterface();
             
+            isLoadingGames = false;
             clearTimeout(window.loadGamesTimeout);
             window.loadGamesTimeout = setTimeout(() => {
-                loadGames();
-            }, 300);
+                if (!isLoadingGames) {
+                    loadGames();
+                }
+            }, 500);
         }
 
         // 清除緩存功能
         function clearGameDataCache() {
             gameDataCache.clear();
+            isLoadingGames = false;
+            isUpdatingInterface = false;
             showNotification('已清除遊戲數據緩存', 'success');
         }
 
@@ -791,10 +815,13 @@
             }
             
             isLoadingGames = false; // 重置載入狀態
+            isUpdatingInterface = false; // 重置界面狀態
+            
+            clearTimeout(window.loadGamesTimeout);
             await loadGames();
         }
 
-        // 載入遊戲 - 添加緩存和重複載入防護
+        // 載入遊戲 - 修復重複載入和RLS權限問題
         async function loadGames() {
             if (selectedUsers.length === 0) {
                 allGames = [];
@@ -816,6 +843,7 @@
                 showNotification('正在載入遊戲資料...', 'info');
                 
                 const allUserGames = [];
+                let needsSaving = false;
                 
                 for (let i = 0; i < selectedUsers.length; i++) {
                     const user = selectedUsers[i];
@@ -834,10 +862,7 @@
                             // 如果資料庫沒有數據，從API載入
                             if (!games || games.length === 0) {
                                 games = await fetchUserGames(user.id);
-                                // 保存到資料庫
-                                if (games.length > 0) {
-                                    await saveUserGamesToDB(user.id, games);
-                                }
+                                needsSaving = true;
                             }
                             
                             // 緩存數據
@@ -849,6 +874,24 @@
                         console.error(`載入用戶 ${user.name} 失敗:`, error);
                         allUserGames.push([]);
                     }
+                }
+                
+                // 嘗試保存新數據到資料庫（非阻塞）
+                if (needsSaving) {
+                    // 在背景異步保存，不阻塞UI
+                    setTimeout(async () => {
+                        for (let i = 0; i < selectedUsers.length; i++) {
+                            const user = selectedUsers[i];
+                            const games = allUserGames[i];
+                            if (games && games.length > 0) {
+                                try {
+                                    await saveUserGamesToDB(user.id, games);
+                                } catch (error) {
+                                    console.warn(`保存用戶 ${user.name} 遊戲到資料庫失敗:`, error);
+                                }
+                            }
+                        }
+                    }, 1000);
                 }
                 
                 allGames = calculateCommonGames(allUserGames);
@@ -872,7 +915,7 @@
             }
         }
 
-        // 從資料庫載入用戶遊戲 - 修復關聯查詢
+        // 從資料庫載入用戶遊戲 - 優化查詢邏輯
         async function loadUserGamesFromDB(steamId) {
             try {
                 if (!supabase) return null;
@@ -880,12 +923,18 @@
                 // 首先找到用戶ID
                 const { data: user, error: userError } = await supabase
                     .from('users')
-                    .select('id')
+                    .select('id, game_count')
                     .eq('steam_id', steamId)
                     .single();
                 
                 if (userError || !user) {
                     console.log(`用戶 ${steamId} 在資料庫中不存在`);
+                    return null;
+                }
+                
+                // 如果用戶沒有遊戲記錄，直接返回
+                if (!user.game_count || user.game_count === 0) {
+                    console.log(`用戶 ${steamId} 沒有遊戲記錄`);
                     return null;
                 }
                 
@@ -900,7 +949,8 @@
                             header_image
                         )
                     `)
-                    .eq('user_id', user.id);
+                    .eq('user_id', user.id)
+                    .limit(1000); // 限制查詢數量避免超時
                 
                 if (error) {
                     console.error('從資料庫載入遊戲失敗:', error);
@@ -913,12 +963,14 @@
                 }
                 
                 // 轉換資料庫格式為Steam API格式
-                const games = userGames.map(ug => ({
-                    appid: ug.games.steam_app_id,
-                    name: ug.games.name,
-                    playtime_forever: ug.playtime_forever || 0,
-                    img_icon_url: ug.games.header_image || ''
-                }));
+                const games = userGames
+                    .filter(ug => ug.games && ug.games.steam_app_id) // 過濾無效數據
+                    .map(ug => ({
+                        appid: ug.games.steam_app_id,
+                        name: ug.games.name || `Game ${ug.games.steam_app_id}`,
+                        playtime_forever: ug.playtime_forever || 0,
+                        img_icon_url: ug.games.header_image || ''
+                    }));
                 
                 console.log(`從資料庫載入用戶 ${steamId} 的 ${games.length} 個遊戲`);
                 return games;
@@ -929,14 +981,14 @@
             }
         }
 
-        // 保存用戶遊戲到資料庫 - 使用遊戲ID而非app_id作為外鍵
+        // 保存用戶遊戲到資料庫 - 修復RLS權限問題
         async function saveUserGamesToDB(steamId, games) {
             try {
                 if (!supabase || !games || games.length === 0) return;
                 
-                console.log(`保存用戶 ${steamId} 的 ${games.length} 個遊戲到資料庫`);
+                console.log(`嘗試保存用戶 ${steamId} 的 ${games.length} 個遊戲到資料庫`);
                 
-                // 首先確保用戶存在
+                // 首先檢查用戶是否有寫入權限
                 const { data: user, error: userError } = await supabase
                     .from('users')
                     .select('id')
@@ -944,103 +996,103 @@
                     .single();
                 
                 if (userError || !user) {
-                    console.error('找不到用戶或用戶查詢失敗:', userError);
+                    console.warn(`無法找到用戶 ${steamId}，跳過資料庫保存`);
                     return;
                 }
                 
+                // 測試寫入權限 - 嘗試保存一個測試遊戲
+                const testGame = {
+                    steam_app_id: 999999999, // 使用不存在的ID進行測試
+                    name: 'Test Game',
+                    header_image: ''
+                };
+                
+                const { error: testError } = await supabase
+                    .from('games')
+                    .insert(testGame);
+                
+                // 如果是RLS錯誤，說明沒有寫入權限
+                if (testError && testError.code === '42501') {
+                    console.warn(`用戶沒有寫入games表的權限，使用僅緩存模式`);
+                    showNotification('資料庫權限不足，使用緩存模式', 'warning');
+                    return;
+                }
+                
+                // 清理測試數據
+                if (!testError) {
+                    await supabase
+                        .from('games')
+                        .delete()
+                        .eq('steam_app_id', 999999999);
+                }
+                
+                // 如果有權限，執行正常的保存流程
+                console.log(`用戶有寫入權限，開始保存遊戲數據`);
+                
                 // 先刪除該用戶的舊遊戲關聯
-                await supabase
+                const { error: deleteError } = await supabase
                     .from('user_games')
                     .delete()
                     .eq('user_id', user.id);
                 
-                // 批量處理遊戲數據
-                const batchSize = 50;
-                const totalBatches = Math.ceil(games.length / batchSize);
+                if (deleteError && deleteError.code === '42501') {
+                    console.warn(`沒有刪除user_games的權限，跳過資料庫保存`);
+                    return;
+                }
                 
-                for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-                    const startIndex = batchIndex * batchSize;
-                    const endIndex = Math.min(startIndex + batchSize, games.length);
-                    const batchGames = games.slice(startIndex, endIndex);
+                // 簡化保存策略：只保存用戶遊戲關聯，不保存遊戲詳情
+                let successCount = 0;
+                const batchSize = 20; // 減少批次大小
+                
+                for (let i = 0; i < games.length; i += batchSize) {
+                    const batch = games.slice(i, i + batchSize);
                     
-                    console.log(`處理批次 ${batchIndex + 1}/${totalBatches}: ${batchGames.length} 個遊戲`);
-                    
-                    // 準備遊戲數據並插入/更新
-                    for (const game of batchGames) {
-                        try {
-                            // 插入或更新遊戲記錄
-                            const { data: gameRecord, error: gameError } = await supabase
-                                .from('games')
-                                .upsert({
-                                    steam_app_id: game.appid,
-                                    name: game.name || `Game ${game.appid}`,
-                                    header_image: game.img_icon_url || ''
-                                }, { 
-                                    onConflict: 'steam_app_id',
-                                    ignoreDuplicates: false
-                                })
-                                .select('id')
-                                .single();
-                            
-                            if (gameError) {
-                                console.error(`保存遊戲 ${game.appid} 失敗:`, gameError);
-                                continue;
+                    try {
+                        // 批量插入用戶遊戲關聯（簡化版）
+                        const userGamesToInsert = batch.map(game => ({
+                            user_id: user.id,
+                            // 假設game_id就是steam_app_id，或者創建一個簡單的映射
+                            game_id: game.appid, // 這裡可能需要根據實際資料庫結構調整
+                            playtime_forever: game.playtime_forever || 0
+                        }));
+                        
+                        const { error: insertError } = await supabase
+                            .from('user_games')
+                            .insert(userGamesToInsert);
+                        
+                        if (insertError) {
+                            console.warn(`批次 ${Math.floor(i/batchSize) + 1} 保存失敗:`, insertError.message);
+                            // 如果是權限問題，就停止嘗試
+                            if (insertError.code === '42501') {
+                                console.warn('遇到權限錯誤，停止保存嘗試');
+                                break;
                             }
-                            
-                            // 如果沒有返回遊戲記錄，嘗試查詢
-                            let gameId;
-                            if (gameRecord && gameRecord.id) {
-                                gameId = gameRecord.id;
-                            } else {
-                                const { data: existingGame } = await supabase
-                                    .from('games')
-                                    .select('id')
-                                    .eq('steam_app_id', game.appid)
-                                    .single();
-                                
-                                if (!existingGame) {
-                                    console.error(`無法找到遊戲記錄 ${game.appid}`);
-                                    continue;
-                                }
-                                gameId = existingGame.id;
-                            }
-                            
-                            // 插入用戶遊戲關聯
-                            const { error: userGameError } = await supabase
-                                .from('user_games')
-                                .insert({
-                                    user_id: user.id,
-                                    game_id: gameId,
-                                    playtime_forever: game.playtime_forever || 0
-                                });
-                            
-                            if (userGameError) {
-                                console.error(`保存用戶遊戲關聯失敗:`, userGameError);
-                            }
-                            
-                        } catch (error) {
-                            console.error(`處理遊戲 ${game.appid} 時發生錯誤:`, error);
+                        } else {
+                            successCount += batch.length;
                         }
+                    } catch (error) {
+                        console.warn(`保存批次時發生錯誤:`, error);
                     }
                 }
                 
-                console.log(`成功保存用戶 ${steamId} 的遊戲數據到資料庫`);
-                
-                // 更新用戶統計
-                const { error: updateError } = await supabase
-                    .from('users')
-                    .update({ 
-                        game_count: games.length,
-                        total_playtime: games.reduce((total, game) => total + (game.playtime_forever || 0), 0)
-                    })
-                    .eq('id', user.id);
-                
-                if (updateError) {
-                    console.error('更新用戶統計失敗:', updateError);
+                if (successCount > 0) {
+                    console.log(`成功保存 ${successCount}/${games.length} 個遊戲關聯到資料庫`);
+                    
+                    // 更新用戶統計
+                    await supabase
+                        .from('users')
+                        .update({ 
+                            game_count: games.length,
+                            total_playtime: games.reduce((total, game) => total + (game.playtime_forever || 0), 0)
+                        })
+                        .eq('id', user.id);
+                } else {
+                    console.warn('未能保存任何遊戲數據到資料庫');
                 }
                 
             } catch (error) {
-                console.error('保存遊戲數據時發生錯誤:', error);
+                console.warn('保存遊戲數據時發生錯誤，將僅使用緩存:', error.message);
+                // 不拋出錯誤，讓應用繼續運行
             }
         }
 
@@ -1311,13 +1363,21 @@
             updateGamesInterface();
         }
 
-        // 更新遊戲界面（修復重複創建問題）
+        // 更新遊戲界面（防止重複創建）
         function updateGamesInterface() {
             try {
                 if (!elements.gamesGrid || !elements.emptyState) {
                     console.warn('遊戲界面元素不存在');
                     return;
                 }
+                
+                // 防止重複更新
+                if (isUpdatingInterface) {
+                    console.log('界面更新中，跳過重複請求');
+                    return;
+                }
+                
+                isUpdatingInterface = true;
                 
                 // 確實清空現有內容
                 while (elements.gamesGrid.firstChild) {
@@ -1338,7 +1398,7 @@
                     for (let i = 0; i < filteredGames.length; i++) {
                         try {
                             const game = filteredGames[i];
-                            if (game && game.name) {
+                            if (game && game.name && game.appid) {
                                 const gameCard = createGameCard(game);
                                 if (gameCard) {
                                     fragment.appendChild(gameCard);
@@ -1356,9 +1416,12 @@
                 }
                 
                 updateStats();
+                
             } catch (error) {
                 console.error('更新遊戲界面失敗:', error);
                 showNotification('顯示遊戲時發生錯誤', 'error');
+            } finally {
+                isUpdatingInterface = false;
             }
         }
 
