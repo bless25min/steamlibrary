@@ -124,7 +124,6 @@ function App() {
     setSyncStatus('同步中...');
 
     try {
-      const allGames = [];
       const gameMap = new Map();
       let successCount = 0;
       let errors = [];
