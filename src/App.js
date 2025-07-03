@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// 在真實項目中，取消註釋下面這行：
-// import { supabase, SteamAPI } from './supabaseClient';
 
 // 圖示組件
 const Icons = {
@@ -11,7 +9,7 @@ const Icons = {
   ),
   Steam: () => (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm-1-8h2v6h-2v-6zm0-4h2v2h-2V8z"/>
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-8h2v6h-2v-6zm0-4h2v2h-2V8z"/>
     </svg>
   ),
   Search: () => (
@@ -54,363 +52,15 @@ const Icons = {
       <path d="M12 6L9 9l3-8 3 8-3-3zM6 9l-3 8h18l-3-8-6 4-6-4z"/>
     </svg>
   ),
-  AlertTriangle: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5l-6.928-12c-.77-.833-2.494-.833-3.464 0l-6.928 12c-.77.833.192 2.5 1.732 2.5z" />
+  X: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
 };
 
-// ========== Supabase 配置 ==========
-const SUPABASE_CONFIG = {
-  url: 'https://lwbrqtevzhfkwbwbcdtz.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3YnJxdGV2emhma3did2JjZHR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NjcxMjYsImV4cCI6MjA2NzA0MzEyNn0.4s16bos5EEhSuUg-K1Paf8B5UXyo-Ca8reTFZ03VVT8'
-  // Steam API Key 已移除 - 將通過後端 Edge Functions 處理
-};
-
-// 模擬的 Supabase 客戶端 (開發用)
-const createMockSupabase = () => {
-  // 你的四個共享帳號 + 其他模擬用戶
-  const mockUsers = [
-    // 你的四個共享帳號
-    {
-      id: 'shared_1',
-      discord_id: 'shared_account_1',
-      username: '共享帳號 #1',
-      avatar_url: 'https://cdn.discordapp.com/avatars/shared1/avatar1.png',
-      steam_id: '76561199470483407',
-      steam_profile_url: 'https://steamcommunity.com/profiles/76561199470483407/',
-      game_count: 12,
-      total_playtime: 456,
-      created_at: '2024-01-01',
-      is_shared: true
-    },
-    {
-      id: 'shared_2',
-      discord_id: 'shared_account_2',
-      username: '共享帳號 #2',
-      avatar_url: 'https://cdn.discordapp.com/avatars/shared2/avatar2.png',
-      steam_id: '76561199509330900',
-      steam_profile_url: 'https://steamcommunity.com/profiles/76561199509330900/',
-      game_count: 8,
-      total_playtime: 312,
-      created_at: '2024-01-01',
-      is_shared: true
-    },
-    {
-      id: 'shared_3',
-      discord_id: 'shared_account_3',
-      username: '共享帳號 #3',
-      avatar_url: 'https://cdn.discordapp.com/avatars/shared3/avatar3.png',
-      steam_id: '76561199509470809',
-      steam_profile_url: 'https://steamcommunity.com/profiles/76561199509470809/',
-      game_count: 15,
-      total_playtime: 678,
-      created_at: '2024-01-01',
-      is_shared: true
-    },
-    {
-      id: 'shared_4',
-      discord_id: 'shared_account_4',
-      username: '共享帳號 #4',
-      avatar_url: 'https://cdn.discordapp.com/avatars/shared4/avatar4.png',
-      steam_id: '76561199509470809',
-      steam_profile_url: 'https://steamcommunity.com/profiles/76561199509470809/',
-      game_count: 10,
-      total_playtime: 523,
-      created_at: '2024-01-01',
-      is_shared: true
-    },
-    // 其他模擬用戶（登入後才看得到）
-    {
-      id: '1',
-      discord_id: '123456789',
-      username: 'GamerPro2024',
-      avatar_url: 'https://cdn.discordapp.com/avatars/123456789/avatar1.png',
-      steam_id: '76561198123456789',
-      steam_profile_url: 'https://steamcommunity.com/id/gamerpro2024/',
-      game_count: 7,
-      total_playtime: 234,
-      created_at: '2024-01-15',
-      is_shared: false
-    },
-    {
-      id: '2', 
-      discord_id: '987654321',
-      username: 'SteamMaster',
-      avatar_url: 'https://cdn.discordapp.com/avatars/987654321/avatar2.png',
-      steam_id: '76561198987654321',
-      steam_profile_url: 'https://steamcommunity.com/id/steammaster/',
-      game_count: 5,
-      total_playtime: 156,
-      created_at: '2024-02-01',
-      is_shared: false
-    }
-  ];
-
-  // 共享帳號的遊戲庫（豐富的遊戲內容）
-  const sharedGames = [
-    {
-      id: 'game_1',
-      steam_app_id: '730',
-      name: 'Counter-Strike 2',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg',
-      user_games: [
-        { playtime_forever: 8760, user: { username: '共享帳號 #1' } },
-        { playtime_forever: 6240, user: { username: '共享帳號 #2' } },
-        { playtime_forever: 5520, user: { username: '共享帳號 #3' } }
-      ]
-    },
-    {
-      id: 'game_2',
-      steam_app_id: '1086940',
-      name: 'Baldur\'s Gate 3',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1086940/header.jpg',
-      user_games: [
-        { playtime_forever: 12600, user: { username: '共享帳號 #1' } },
-        { playtime_forever: 9840, user: { username: '共享帳號 #4' } }
-      ]
-    },
-    {
-      id: 'game_3',
-      steam_app_id: '1245620',
-      name: 'ELDEN RING',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1245620/header.jpg',
-      user_games: [
-        { playtime_forever: 15600, user: { username: '共享帳號 #2' } },
-        { playtime_forever: 11280, user: { username: '共享帳號 #3' } },
-        { playtime_forever: 8760, user: { username: '共享帳號 #4' } }
-      ]
-    },
-    {
-      id: 'game_4',
-      steam_app_id: '570',
-      name: 'Dota 2',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/570/header.jpg',
-      user_games: [
-        { playtime_forever: 18000, user: { username: '共享帳號 #1' } },
-        { playtime_forever: 14400, user: { username: '共享帳號 #2' } }
-      ]
-    },
-    {
-      id: 'game_5',
-      steam_app_id: '271590',
-      name: 'Grand Theft Auto V',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/271590/header.jpg',
-      user_games: [
-        { playtime_forever: 9600, user: { username: '共享帳號 #3' } },
-        { playtime_forever: 7200, user: { username: '共享帳號 #4' } }
-      ]
-    },
-    {
-      id: 'game_6',
-      steam_app_id: '292030',
-      name: 'The Witcher 3: Wild Hunt',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/292030/header.jpg',
-      user_games: [
-        { playtime_forever: 10800, user: { username: '共享帳號 #1' } },
-        { playtime_forever: 8400, user: { username: '共享帳號 #3' } }
-      ]
-    },
-    {
-      id: 'game_7',
-      steam_app_id: '582010',
-      name: 'Monster Hunter: World',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/582010/header.jpg',
-      user_games: [
-        { playtime_forever: 7800, user: { username: '共享帳號 #2' } },
-        { playtime_forever: 6600, user: { username: '共享帳號 #4' } }
-      ]
-    },
-    {
-      id: 'game_8',
-      steam_app_id: '431960',
-      name: 'Wallpaper Engine',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/431960/header.jpg',
-      user_games: [
-        { playtime_forever: 4800, user: { username: '共享帳號 #1' } },
-        { playtime_forever: 3600, user: { username: '共享帳號 #2' } },
-        { playtime_forever: 2400, user: { username: '共享帳號 #3' } }
-      ]
-    },
-    {
-      id: 'game_9',
-      steam_app_id: '1174180',
-      name: 'Red Dead Redemption 2',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1174180/header.jpg',
-      user_games: [
-        { playtime_forever: 13200, user: { username: '共享帳號 #2' } },
-        { playtime_forever: 9000, user: { username: '共享帳號 #4' } }
-      ]
-    },
-    {
-      id: 'game_10',
-      steam_app_id: '1938090',
-      name: 'Call of Duty®: Modern Warfare® II',
-      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1938090/header.jpg',
-      user_games: [
-        { playtime_forever: 6000, user: { username: '共享帳號 #1' } },
-        { playtime_forever: 4800, user: { username: '共享帳號 #3' } }
-      ]
-    }
-  ];
-
-  return {
-    auth: {
-      signInWithOAuth: async (config) => {
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            const mockUser = {
-              id: 'mock_' + Date.now(),
-              user_metadata: {
-                provider_id: '999888777',
-                full_name: 'TestUser' + Math.floor(Math.random() * 1000),
-                avatar_url: `https://cdn.discordapp.com/avatars/999888777/avatar.png`
-              }
-            };
-            resolve({ data: { user: mockUser }, error: null });
-          }, 1500);
-        });
-      },
-      signOut: async () => ({ error: null }),
-      getUser: async () => ({ data: { user: null }, error: null }),
-      onAuthStateChange: (callback) => {
-        return { data: { subscription: {} } };
-      }
-    },
-    from: (table) => ({
-      select: (columns = '*') => ({
-        eq: (column, value) => ({
-          single: async () => {
-            if (table === 'users') {
-              const user = mockUsers.find(u => u[column] === value);
-              return { data: user || null, error: null };
-            }
-            return { data: null, error: null };
-          },
-          order: (orderColumn, options) => ({
-            then: async (callback) => {
-              if (table === 'users') {
-                return callback({ data: mockUsers, error: null });
-              }
-              return callback({ data: [], error: null });
-            }
-          })
-        }),
-        order: (orderColumn, options) => ({
-          then: async (callback) => {
-            if (table === 'users') {
-              return callback({ data: mockUsers, error: null });
-            } else if (table === 'games') {
-              return callback({ data: sharedGames, error: null });
-            }
-            return callback({ data: [], error: null });
-          }
-        }),
-        then: async (callback) => {
-          if (table === 'users') {
-            return callback({ data: mockUsers, error: null });
-          } else if (table === 'games') {
-            return callback({ data: sharedGames, error: null });
-          }
-          return callback({ data: [], error: null });
-        }
-      }),
-      insert: (data) => ({
-        select: () => ({
-          single: async () => {
-            if (table === 'users') {
-              const newUser = { ...data, id: 'new_' + Date.now() };
-              mockUsers.push(newUser);
-              return { data: newUser, error: null };
-            }
-            return { data: data, error: null };
-          }
-        })
-      }),
-      update: (data) => ({
-        eq: (column, value) => ({
-          select: () => ({
-            single: async () => {
-              if (table === 'users') {
-                const userIndex = mockUsers.findIndex(u => u[column] === value);
-                if (userIndex >= 0) {
-                  mockUsers[userIndex] = { ...mockUsers[userIndex], ...data };
-                  return { data: mockUsers[userIndex], error: null };
-                }
-              }
-              return { data: null, error: null };
-            }
-          })
-        })
-      }),
-      upsert: (data, options) => ({
-        select: () => ({
-          single: async () => {
-            // 模擬 upsert 操作
-            if (table === 'games') {
-              const newData = { ...data, id: 'game_' + Date.now() };
-              return { data: newData, error: null };
-            } else if (table === 'user_games') {
-              const newData = { ...data, id: 'user_game_' + Date.now() };
-              return { data: newData, error: null };
-            }
-            return { data: data, error: null };
-          }
-        }),
-        // 對於 user_games 表不需要 select
-        then: async () => {
-          return { data: null, error: null };
-        }
-      })
-    })
-  };
-};
-
-// 初始化 Supabase 客戶端
-let supabase;
-
-// 在真實環境中初始化 Supabase
-const initSupabase = () => {
-  try {
-    // 檢查是否在瀏覽器環境且有 Supabase 配置
-    if (typeof window !== 'undefined' && SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey) {
-      // 動態導入 Supabase（在真實環境中你應該使用 import）
-      if (window.supabase) {
-        // 如果已經有全域 supabase 客戶端
-        supabase = window.supabase;
-        console.log('✅ 使用現有的 Supabase 客戶端');
-      } else {
-        // 創建 Supabase 客戶端
-        // 在真實項目中，這裡應該是：
-        // import { createClient } from '@supabase/supabase-js'
-        // supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey)
-        
-        // 暫時檢查是否可以創建客戶端
-        if (typeof window.createClient === 'function') {
-          supabase = window.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-          console.log('✅ 創建了新的 Supabase 客戶端');
-        } else {
-          console.log('⚠️ Supabase 客戶端庫未找到，使用模擬客戶端');
-          supabase = createMockSupabase();
-        }
-      }
-    } else {
-      console.log('🧪 使用模擬 Supabase 客戶端');
-      supabase = createMockSupabase();
-    }
-  } catch (error) {
-    console.log('🧪 使用模擬的 Supabase 客戶端:', error);
-    supabase = createMockSupabase();
-  }
-};
-
-// 初始化
-initSupabase();
-
-// ========== Steam API 工具函數 ==========
+// 模擬的 Steam API 工具函數
 const SteamAPI = {
-  // 解析 Steam URL
   parseSteamUrl: (url) => {
     const patterns = [
       { pattern: /steamcommunity\.com\/id\/([^/]+)/, type: 'custom_id' },
@@ -430,13 +80,10 @@ const SteamAPI = {
     return null;
   },
 
-  // 解析自訂ID為Steam ID（簡化版）
   resolveVanityUrl: async (vanityName) => {
-    // 生成模擬Steam ID
     return '76561198' + Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
   },
 
-  // 生成模擬遊戲數據
   generateMockGames: () => {
     const baseGames = [
       { appid: 730, name: 'Counter-Strike 2' },
@@ -447,10 +94,11 @@ const SteamAPI = {
       { appid: 271590, name: 'Grand Theft Auto V' },
       { appid: 292030, name: 'The Witcher 3: Wild Hunt' },
       { appid: 582010, name: 'Monster Hunter: World' },
-      { appid: 431960, name: 'Wallpaper Engine' }
+      { appid: 431960, name: 'Wallpaper Engine' },
+      { appid: 1174180, name: 'Red Dead Redemption 2' },
+      { appid: 1938090, name: 'Call of Duty®: Modern Warfare® II' }
     ];
 
-    // 隨機選擇5-8個遊戲
     const selectedCount = Math.floor(Math.random() * 4) + 5;
     const selectedGames = [...baseGames]
       .sort(() => 0.5 - Math.random())
@@ -464,14 +112,11 @@ const SteamAPI = {
   }
 };
 
-// ========== 主要組件 ==========
 function App() {
-  // 用戶狀態
+  // 狀態管理
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
-  
-  // 頁面狀態
   const [activeTab, setActiveTab] = useState('discover');
   
   // Steam 設定
@@ -485,219 +130,204 @@ function App() {
   const [filterBy, setFilterBy] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   
-  // 數據
-  const [users, setUsers] = useState([]);
-  const [games, setGames] = useState([]);
-  
-  // 配置檢查
-  const [configError, setConfigError] = useState('');
+  // 模擬數據 - 共享帳號
+  const [users] = useState([
+    {
+      id: 'shared_1',
+      discord_id: 'shared_account_1',
+      username: '共享帳號 #1',
+      avatar_url: 'https://ui-avatars.com/api/?name=S1&background=3b82f6&color=fff',
+      steam_id: '76561199470483407',
+      steam_profile_url: 'https://steamcommunity.com/profiles/76561199470483407/',
+      game_count: 12,
+      total_playtime: 456,
+      created_at: '2024-01-01',
+      is_shared: true
+    },
+    {
+      id: 'shared_2',
+      discord_id: 'shared_account_2',
+      username: '共享帳號 #2',
+      avatar_url: 'https://ui-avatars.com/api/?name=S2&background=10b981&color=fff',
+      steam_id: '76561199509330900',
+      steam_profile_url: 'https://steamcommunity.com/profiles/76561199509330900/',
+      game_count: 8,
+      total_playtime: 312,
+      created_at: '2024-01-01',
+      is_shared: true
+    },
+    {
+      id: 'shared_3',
+      discord_id: 'shared_account_3',
+      username: '共享帳號 #3',
+      avatar_url: 'https://ui-avatars.com/api/?name=S3&background=f59e0b&color=fff',
+      steam_id: '76561199509470809',
+      steam_profile_url: 'https://steamcommunity.com/profiles/76561199509470809/',
+      game_count: 15,
+      total_playtime: 678,
+      created_at: '2024-01-01',
+      is_shared: true
+    },
+    {
+      id: 'shared_4',
+      discord_id: 'shared_account_4',
+      username: '共享帳號 #4',
+      avatar_url: 'https://ui-avatars.com/api/?name=S4&background=ef4444&color=fff',
+      steam_id: '76561199509470810',
+      steam_profile_url: 'https://steamcommunity.com/profiles/76561199509470810/',
+      game_count: 10,
+      total_playtime: 523,
+      created_at: '2024-01-01',
+      is_shared: true
+    }
+  ]);
 
-  // 初始化和身份驗證
+  // 模擬遊戲數據
+  const [games] = useState([
+    {
+      id: 'game_1',
+      steam_app_id: '730',
+      name: 'Counter-Strike 2',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg',
+      owners: ['共享帳號 #1', '共享帳號 #2', '共享帳號 #3'],
+      playtime: {
+        '共享帳號 #1': 146,
+        '共享帳號 #2': 104,
+        '共享帳號 #3': 92
+      }
+    },
+    {
+      id: 'game_2',
+      steam_app_id: '1086940',
+      name: 'Baldur\'s Gate 3',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1086940/header.jpg',
+      owners: ['共享帳號 #1', '共享帳號 #4'],
+      playtime: {
+        '共享帳號 #1': 210,
+        '共享帳號 #4': 164
+      }
+    },
+    {
+      id: 'game_3',
+      steam_app_id: '1245620',
+      name: 'ELDEN RING',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/1245620/header.jpg',
+      owners: ['共享帳號 #2', '共享帳號 #3', '共享帳號 #4'],
+      playtime: {
+        '共享帳號 #2': 260,
+        '共享帳號 #3': 188,
+        '共享帳號 #4': 146
+      }
+    },
+    {
+      id: 'game_4',
+      steam_app_id: '570',
+      name: 'Dota 2',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/570/header.jpg',
+      owners: ['共享帳號 #1', '共享帳號 #2'],
+      playtime: {
+        '共享帳號 #1': 300,
+        '共享帳號 #2': 240
+      }
+    },
+    {
+      id: 'game_5',
+      steam_app_id: '271590',
+      name: 'Grand Theft Auto V',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/271590/header.jpg',
+      owners: ['共享帳號 #3', '共享帳號 #4'],
+      playtime: {
+        '共享帳號 #3': 160,
+        '共享帳號 #4': 120
+      }
+    },
+    {
+      id: 'game_6',
+      steam_app_id: '292030',
+      name: 'The Witcher 3: Wild Hunt',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/292030/header.jpg',
+      owners: ['共享帳號 #1', '共享帳號 #3'],
+      playtime: {
+        '共享帳號 #1': 180,
+        '共享帳號 #3': 140
+      }
+    },
+    {
+      id: 'game_7',
+      steam_app_id: '582010',
+      name: 'Monster Hunter: World',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/582010/header.jpg',
+      owners: ['共享帳號 #2', '共享帳號 #4'],
+      playtime: {
+        '共享帳號 #2': 130,
+        '共享帳號 #4': 110
+      }
+    },
+    {
+      id: 'game_8',
+      steam_app_id: '431960',
+      name: 'Wallpaper Engine',
+      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/431960/header.jpg',
+      owners: ['共享帳號 #1', '共享帳號 #2', '共享帳號 #3'],
+      playtime: {
+        '共享帳號 #1': 80,
+        '共享帳號 #2': 60,
+        '共享帳號 #3': 40
+      }
+    }
+  ]);
+
+  // 當前顯示的用戶列表（可能包含登入用戶）
+  const [displayUsers, setDisplayUsers] = useState(users);
+
+  // 初始化
   useEffect(() => {
-    const initializeApp = async () => {
-      checkConfig();
-      await initializeAuth();
-      // 無論是否登入都載入數據（共享帳號的遊戲）
-      await loadData();
-    };
-    
-    initializeApp();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 檢查配置
-  const checkConfig = () => {
-    // 配置已完成，無需檢查
-    setConfigError('');
-  };
-
-  // 初始化身份驗證
-  const initializeAuth = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await loadUserData(user);
-      }
-    } catch (error) {
-      console.error('初始化認證失敗:', error);
-    } finally {
-      setLoading(false);
+    if (!user && activeTab === 'profile') {
+      setActiveTab('discover');
     }
+  }, [user, activeTab]);
 
-    // 監聽認證狀態變化
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        await loadUserData(session.user);
-        // 重新載入數據以顯示完整內容
-        await loadData();
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        // 重新載入數據以只顯示共享內容
-        await loadData();
-      }
-    });
-  };
-
-  // 載入用戶數據
-  const loadUserData = async (authUser) => {
-    try {
-      const { data: userData, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('discord_id', authUser.user_metadata.provider_id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      if (userData) {
-        setUser(userData);
-      } else {
-        // 創建新用戶
-        const newUser = {
-          discord_id: authUser.user_metadata.provider_id,
-          username: authUser.user_metadata.full_name || authUser.user_metadata.preferred_username,
-          avatar_url: authUser.user_metadata.avatar_url
-        };
-
-        const { data: createdUser, error: createError } = await supabase
-          .from('users')
-          .insert(newUser)
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        
-        setUser(createdUser);
-        setShowSteamForm(true);
-      }
-    } catch (error) {
-      console.error('載入用戶數據失敗:', error);
-    }
-  };
-
-  // 載入平台數據
-  const loadData = async () => {
-    try {
-      // 載入用戶數據
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (usersError) throw usersError;
-      
-      // 根據登入狀態篩選用戶數據
-      if (usersData) {
-        if (!user) {
-          // 未登入：只顯示共享帳號
-          setUsers(usersData.filter(u => u.is_shared));
-        } else {
-          // 已登入：顯示所有用戶
-          setUsers(usersData);
-        }
-      }
-
-      // 載入遊戲數據
-      const { data: gamesData, error: gamesError } = await supabase
-        .from('games')
-        .select(`
-          *,
-          user_games (
-            playtime_forever,
-            user:users (username)
-          )
-        `);
-      
-      if (gamesError) throw gamesError;
-      
-      if (gamesData) {
-        // 轉換數據格式以符合前端期望
-        const formattedGames = gamesData.map(game => {
-          let owners = game.user_games?.map(ug => ug.user?.username).filter(Boolean) || [];
-          const playtime = {};
-          
-          game.user_games?.forEach(ug => {
-            if (ug.user?.username && ug.playtime_forever) {
-              playtime[ug.user.username] = Math.round(ug.playtime_forever / 60);
-            }
-          });
-
-          // 如果未登入，只顯示共享帳號的遊戲
-          if (!user) {
-            const sharedOwners = owners.filter(owner => owner.includes('共享帳號'));
-            if (sharedOwners.length === 0) {
-              return null; // 過濾掉非共享帳號的遊戲
-            }
-            owners = sharedOwners;
-            
-            // 只保留共享帳號的遊戲時間
-            const sharedPlaytime = {};
-            Object.keys(playtime).forEach(playerName => {
-              if (playerName.includes('共享帳號')) {
-                sharedPlaytime[playerName] = playtime[playerName];
-              }
-            });
-            
-            return {
-              id: game.id,
-              steam_app_id: game.steam_app_id,
-              name: game.name,
-              header_image: game.header_image,
-              owners: owners,
-              playtime: sharedPlaytime
-            };
-          }
-
-          return {
-            id: game.id,
-            steam_app_id: game.steam_app_id,
-            name: game.name,
-            header_image: game.header_image,
-            owners: owners,
-            playtime: playtime
-          };
-        }).filter(Boolean); // 移除 null 值
-        
-        setGames(formattedGames);
-      }
-    } catch (error) {
-      console.error('載入數據失敗:', error);
-    }
-  };
-
-  // Discord 登入
+  // Discord 登入模擬
   const signInWithDiscord = async () => {
     setAuthLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'discord',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
+      // 模擬登入過程
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      if (error) throw error;
+      const mockUser = {
+        id: 'user_' + Date.now(),
+        discord_id: '999888777',
+        username: 'TestUser' + Math.floor(Math.random() * 1000),
+        avatar_url: `https://ui-avatars.com/api/?name=U&background=6366f1&color=fff`,
+        steam_id: null,
+        steam_profile_url: null,
+        game_count: 0,
+        total_playtime: 0,
+        created_at: new Date().toISOString().split('T')[0],
+        is_shared: false
+      };
+      
+      setUser(mockUser);
+      setDisplayUsers([...users, mockUser]);
+      setShowSteamForm(true); // 首次登入顯示 Steam 設定
     } catch (error) {
-      console.error('Discord登入失敗:', error);
-      alert('登入失敗: ' + error.message);
+      console.error('登入失敗:', error);
+      alert('登入失敗，請稍後重試');
     } finally {
       setAuthLoading(false);
     }
   };
 
   // 登出
-  const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setActiveTab('discover'); // 登出後回到探索頁面
-    } catch (error) {
-      console.error('登出失敗:', error);
-    }
+  const signOut = () => {
+    setUser(null);
+    setDisplayUsers(users); // 只顯示共享帳號
+    setActiveTab('discover');
+    setSteamUrl('');
+    setShowSteamForm(false);
   };
 
-  // 儲存Steam資料並同步遊戲庫
+  // Steam 資料同步
   const saveSteamProfile = async () => {
     if (!steamUrl) {
       alert('請輸入Steam個人頁面連結');
@@ -716,86 +346,43 @@ function App() {
     try {
       let steamId = parsedUrl.steamId;
       
-      // 如果是自訂ID，需要解析為Steam ID
       if (parsedUrl.type === 'custom_id') {
         setSyncStatus('解析自訂ID中...');
         steamId = await SteamAPI.resolveVanityUrl(parsedUrl.identifier);
-        if (!steamId) {
-          alert('無法解析Steam自訂ID，請確認ID是否正確');
-          return;
-        }
       }
 
       setSyncStatus('同步遊戲庫中...');
       
-      // 生成模擬遊戲數據
       const mockGames = SteamAPI.generateMockGames();
       const totalPlaytime = Math.round(mockGames.reduce((total, game) => total + game.playtime_forever, 0) / 60);
 
-      // 更新用戶Steam資料
-      const { data: updatedUser, error: updateError } = await supabase
-        .from('users')
-        .update({
-          steam_id: steamId,
-          steam_profile_url: steamUrl,
-          game_count: mockGames.length,
-          total_playtime: totalPlaytime
-        })
-        .eq('id', user.id)
-        .select()
-        .single();
+      // 更新用戶資料
+      const updatedUser = {
+        ...user,
+        steam_id: steamId,
+        steam_profile_url: steamUrl,
+        game_count: mockGames.length,
+        total_playtime: totalPlaytime
+      };
 
-      if (updateError) throw updateError;
-
-      setSyncStatus('儲存遊戲資料中...');
-
-      // 插入遊戲到遊戲表
-      for (const game of mockGames) {
-        // 先插入遊戲（如果不存在）
-        const { data: gameData, error: gameError } = await supabase
-          .from('games')
-          .upsert({
-            steam_app_id: game.appid.toString(),
-            name: game.name,
-            header_image: game.header_image
-          }, {
-            onConflict: 'steam_app_id'
-          })
-          .select()
-          .single();
-
-        if (gameError) {
-          console.log(`插入遊戲 ${game.name} 失敗:`, gameError);
-          continue;
-        }
-
-        // 建立用戶遊戲關聯
-        await supabase
-          .from('user_games')
-          .upsert({
-            user_id: updatedUser.id,
-            game_id: gameData.id,
-            playtime_forever: game.playtime_forever
-          }, {
-            onConflict: 'user_id,game_id'
-          });
-      }
-
-      // 更新本地用戶狀態
       setUser(updatedUser);
+      
+      // 更新顯示的用戶列表
+      setDisplayUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
+
       setSyncStatus('同步完成！');
       
-      // 重新載入數據
-      await loadData();
+      setTimeout(() => {
+        alert(`Steam資料同步成功！\n遊戲數量: ${mockGames.length}\n總遊戲時間: ${totalPlaytime} 小時`);
+        setShowSteamForm(false);
+        setSteamUrl('');
+        setSyncStatus('');
+      }, 1000);
       
-      alert(`Steam資料同步成功！\n遊戲數量: ${mockGames.length}\n總遊戲時間: ${totalPlaytime} 小時`);
-      
-      setShowSteamForm(false);
-      setSteamUrl('');
     } catch (error) {
-      console.error('同步Steam資料失敗:', error);
+      console.error('同步失敗:', error);
       setSyncStatus('同步失敗');
-      alert('同步失敗: ' + error.message);
+      alert('同步失敗，請稍後重試');
     } finally {
       setSyncLoading(false);
     }
@@ -845,66 +432,6 @@ function App() {
     );
   }
 
-  // 配置錯誤顯示
-  if (configError) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-8">
-          <Icons.AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-4">配置未完成</h1>
-          <p className="text-gray-400 mb-6">{configError}</p>
-          <div className="bg-gray-800 rounded-lg p-4 text-left text-sm">
-            <p className="text-yellow-400 font-semibold mb-2">請在代碼中設置:</p>
-            <ul className="text-gray-300 space-y-1">
-              <li>• SUPABASE_CONFIG.url</li>
-              <li>• SUPABASE_CONFIG.anonKey</li>
-              <li>• SUPABASE_CONFIG.steamApiKey (可選)</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 登入頁面
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white">
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center max-w-md mx-auto p-8">
-            <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Icons.Steam className="w-10 h-10" />
-            </div>
-            
-            <h1 className="text-3xl font-bold mb-2">Steam 遊戲庫共享平台</h1>
-            <p className="text-gray-400 mb-8">
-              與朋友分享你的Steam遊戲庫，發現共同喜好的遊戲
-            </p>
-            
-            <button
-              onClick={signInWithDiscord}
-              disabled={authLoading}
-              className={`w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg flex items-center justify-center space-x-3 transition-colors ${authLoading ? 'opacity-50' : ''}`}
-            >
-              <Icons.Discord />
-              <span>{authLoading ? '登入中...' : '使用 Discord 登入'}</span>
-            </button>
-            
-            <div className="mt-8 text-sm text-gray-500">
-              <p>登入後你可以：</p>
-              <ul className="mt-2 space-y-1">
-                <li>• 添加你的Steam個人頁面連結</li>
-                <li>• 自動同步遊戲庫到平台</li>
-                <li>• 瀏覽其他玩家的遊戲收藏</li>
-                <li>• 發現擁有相同遊戲的朋友</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* 頂部導航 */}
@@ -918,33 +445,31 @@ function App() {
               <div>
                 <h1 className="text-xl font-bold">Steam 遊戲庫共享平台</h1>
                 <p className="text-sm text-gray-400">
-                  {!user ? '共享帳號遊戲庫' : '完整遊戲庫'} • {users.length} 位玩家 • {games.length} 款遊戲
+                  群組遊戲庫 • {displayUsers.length} 位玩家 • {games.length} 款遊戲
                 </p>
               </div>
             </div>
             
             <div className="flex items-center space-x-4">
               {user ? (
-                // 已登入用戶
                 <>
                   <div className="flex items-center space-x-3">
                     <img
                       src={user.avatar_url}
                       alt={user.username}
                       className="w-8 h-8 rounded-full"
-                      onError={(e) => e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=6366f1&color=fff`}
                     />
                     <span className="text-sm font-medium">{user.username}</span>
                   </div>
                   <button
                     onClick={signOut}
                     className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition-colors"
+                    title="登出"
                   >
                     <Icons.LogOut />
                   </button>
                 </>
               ) : (
-                // 未登入用戶
                 <button
                   onClick={signInWithDiscord}
                   disabled={authLoading}
@@ -983,7 +508,7 @@ function App() {
             }`}
           >
             <Icons.Users />
-            <span>玩家列表 ({users.length})</span>
+            <span>玩家列表 ({displayUsers.length})</span>
           </button>
           {user && (
             <button
@@ -1013,14 +538,14 @@ function App() {
                     placeholder="搜尋遊戲..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 
                 <select
                   value={filterBy}
                   onChange={(e) => setFilterBy(e.target.value)}
-                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="all">所有遊戲</option>
                   <option value="popular">熱門遊戲 (2+人擁有)</option>
@@ -1030,7 +555,7 @@ function App() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="name">按名稱排序</option>
                   <option value="popularity">按受歡迎程度排序</option>
@@ -1120,12 +645,12 @@ function App() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">社群玩家</h2>
               <div className="text-sm text-gray-400">
-                共 {users.length} 位玩家加入平台
+                共 {displayUsers.length} 位玩家加入平台
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {users.map((userData, index) => (
+              {displayUsers.map((userData, index) => (
                 <div key={userData.id} className={`rounded-lg p-6 border ${userData.is_shared ? 'bg-blue-900 border-blue-700' : 'bg-gray-800 border-gray-700'}`}>
                   <div className="flex items-start space-x-4 mb-4">
                     <div className="relative">
@@ -1133,16 +658,10 @@ function App() {
                         src={userData.avatar_url}
                         alt={userData.username}
                         className="w-12 h-12 rounded-full"
-                        onError={(e) => e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.username)}&background=6366f1&color=fff`}
                       />
                       {userData.is_shared && (
                         <div className="absolute -top-1 -right-1 bg-blue-500 rounded-full p-1">
                           <Icons.Steam className="w-3 h-3 text-white" />
-                        </div>
-                      )}
-                      {!userData.is_shared && index === 0 && (
-                        <div className="absolute -top-1 -right-1 bg-yellow-500 rounded-full p-1">
-                          <Icons.Crown className="w-3 h-3 text-yellow-900" />
                         </div>
                       )}
                     </div>
@@ -1192,7 +711,7 @@ function App() {
         )}
 
         {/* 我的資料頁面 */}
-        {activeTab === 'profile' && (
+        {activeTab === 'profile' && user && (
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">我的資料</h2>
@@ -1215,7 +734,6 @@ function App() {
                     src={user.avatar_url}
                     alt={user.username}
                     className="w-20 h-20 rounded-full mx-auto mb-4"
-                    onError={(e) => e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=6366f1&color=fff`}
                   />
                   <h3 className="text-xl font-bold mb-2">{user.username}</h3>
                   <p className="text-gray-400 text-sm mb-4">Discord 用戶</p>
@@ -1275,7 +793,7 @@ function App() {
                   <h4 className="text-lg font-semibold mb-4">平台統計</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="text-center">
-                      <div className="text-xl font-bold text-blue-400">{users.length}</div>
+                      <div className="text-xl font-bold text-blue-400">{displayUsers.length}</div>
                       <div className="text-sm text-gray-400">總玩家數</div>
                     </div>
                     <div className="text-center">
@@ -1289,40 +807,36 @@ function App() {
                       <div className="text-sm text-gray-400">熱門遊戲</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-xl font-bold text-yellow-400">
-                        {user ? games.filter(g => g.owners && g.owners.includes(user.username)).length : 0}
-                      </div>
-                      <div className="text-sm text-gray-400">我的遊戲</div>
+                      <div className="text-xl font-bold text-yellow-400">4</div>
+                      <div className="text-sm text-gray-400">共享帳號</div>
                     </div>
                   </div>
                 </div>
 
-                {user && games.filter(game => game.owners && game.owners.includes(user.username)).length > 0 && (
-                  <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                    <h4 className="text-lg font-semibold mb-4">我的熱門遊戲</h4>
-                    <div className="space-y-3">
-                      {games
-                        .filter(game => game.owners && game.owners.includes(user.username))
-                        .slice(0, 5)
-                        .map(game => (
-                          <div key={game.id} className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
-                              <img
-                                src={game.header_image}
-                                alt={game.name}
-                                className="w-12 h-8 object-cover rounded"
-                                onError={(e) => e.target.src = 'https://via.placeholder.com/60x40/374151/9CA3AF'}
-                              />
-                              <span className="font-medium">{game.name}</span>
-                            </div>
-                            <span className="text-sm text-gray-400">
-                              {game.playtime?.[user.username] || 0}小時
-                            </span>
+                <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                  <h4 className="text-lg font-semibold mb-4">熱門共享遊戲</h4>
+                  <div className="space-y-3">
+                    {games
+                      .filter(game => game.owners && game.owners.length >= 2)
+                      .slice(0, 5)
+                      .map(game => (
+                        <div key={game.id} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <img
+                              src={game.header_image}
+                              alt={game.name}
+                              className="w-12 h-8 object-cover rounded"
+                              onError={(e) => e.target.src = 'https://via.placeholder.com/60x40/374151/9CA3AF'}
+                            />
+                            <span className="font-medium">{game.name}</span>
                           </div>
-                        ))}
-                    </div>
+                          <span className="text-sm text-gray-400">
+                            {game.owners.length} 人擁有
+                          </span>
+                        </div>
+                      ))}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
@@ -1343,7 +857,7 @@ function App() {
                 }}
                 className="text-gray-400 hover:text-white"
               >
-                ✕
+                <Icons.X />
               </button>
             </div>
             
@@ -1355,7 +869,7 @@ function App() {
                   value={steamUrl}
                   onChange={(e) => setSteamUrl(e.target.value)}
                   placeholder="https://steamcommunity.com/id/你的ID/"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <div className="mt-2 text-xs text-gray-400">
                   <p>支援格式：</p>
