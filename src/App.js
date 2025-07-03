@@ -269,7 +269,7 @@ const SteamAPI = {
   // 解析 Steam URL
   parseSteamUrl: (url) => {
     const patterns = [
-      { pattern: /steamcommunity\.com\/id\/([^\/]+)/, type: 'custom_id' },
+      { pattern: /steamcommunity\.com\/id\/([^/]+)/, type: 'custom_id' },
       { pattern: /steamcommunity\.com\/profiles\/(\d{17})/, type: 'steam_id' }
     ];
     
@@ -350,10 +350,14 @@ function App() {
 
   // 初始化和身份驗證
   useEffect(() => {
-    checkConfig();
-    initializeAuth();
-    loadData();
-  }, []);
+    const initializeApp = async () => {
+      checkConfig();
+      await initializeAuth();
+      await loadData();
+    };
+    
+    initializeApp();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 檢查配置
   const checkConfig = () => {
