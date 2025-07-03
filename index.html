@@ -249,9 +249,45 @@
     </div>
 
     <script>
-        // 全局錯誤處理
+        // 全局錯誤處理 - 增強版
         window.addEventListener('error', function(e) {
-            console.error('全局錯誤:', e.error);
+            console.error('全局錯誤:', {
+                message: e.message,
+                filename: e.filename,
+                lineno: e.lineno,
+                colno: e.colno,
+                error: e.error,
+                stack: e.error?.stack
+            });
+            
+            // 如果錯誤與字符轉義有關，顯示有用的提示
+            if (e.message && e.message.includes('Unexpected identifier')) {
+                console.warn('檢測到可能的字符轉義問題，正在嘗試恢復...');
+                
+                // 暫時停止顯示新的遊戲卡片，避免錯誤級聯
+                const loadingState = document.getElementById('loadingState');
+                const gamesGrid = document.getElementById('gamesGrid');
+                if (loadingState && gamesGrid) {
+                    loadingState.classList.remove('hidden');
+                    gamesGrid.classList.add('hidden');
+                    
+                    // 3秒後重新嘗試顯示
+                    setTimeout(() => {
+                        loadingState.classList.add('hidden');
+                        gamesGrid.classList.remove('hidden');
+                    }, 3000);
+                }
+            }
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('未處理的Promise錯誤:', {
+                reason: e.reason,
+                promise: e.promise
+            });
+            
+            // 防止Promise錯誤導致應用崩潰
+            e.preventDefault();
         });
 
         // 配置
@@ -593,7 +629,7 @@
             }
         }
 
-        // 創建用戶卡片
+        // 創建用戶卡片（修復字符轉義問題）
         function createUserCard(user) {
             const isSelected = selectedUsers.some(u => u.id === user.id);
             
@@ -606,22 +642,63 @@
             
             const avatarUrl = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=475569&color=ffffff`;
             
-            card.innerHTML = `
-                <div class="flex flex-col items-center space-y-2">
-                    <div class="relative">
-                        <img src="${avatarUrl}" 
-                             alt="${user.name}" 
-                             class="user-avatar w-12 h-12 rounded-full border-2 ${isSelected ? 'border-blue-400' : 'border-slate-500'}"
-                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=475569&color=ffffff'">
-                        ${isSelected ? '<div class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center"><svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg></div>' : ''}
-                    </div>
-                    <div class="text-center">
-                        <div class="text-sm font-medium truncate max-w-20" title="${user.name}">${user.name}</div>
-                        ${user.gameCount > 0 ? `<div class="text-xs text-slate-400">${user.gameCount} 遊戲</div>` : ''}
-                        ${user.isShared ? '<div class="text-xs text-blue-400">共享</div>' : ''}
-                    </div>
-                </div>
-            `;
+            // 創建內容容器
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'flex flex-col items-center space-y-2';
+            
+            // 頭像區域
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'relative';
+            
+            const avatarImg = document.createElement('img');
+            avatarImg.src = avatarUrl;
+            avatarImg.alt = user.name;
+            avatarImg.className = `user-avatar w-12 h-12 rounded-full border-2 ${isSelected ? 'border-blue-400' : 'border-slate-500'}`;
+            avatarImg.onerror = function() {
+                this.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=475569&color=ffffff`;
+            };
+            avatarDiv.appendChild(avatarImg);
+            
+            // 選中指示器
+            if (isSelected) {
+                const checkIcon = document.createElement('div');
+                checkIcon.className = 'absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center';
+                checkIcon.innerHTML = `
+                    <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                    </svg>
+                `;
+                avatarDiv.appendChild(checkIcon);
+            }
+            
+            contentDiv.appendChild(avatarDiv);
+            
+            // 用戶資訊區域
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'text-center';
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'text-sm font-medium truncate max-w-20';
+            nameDiv.title = user.name;
+            nameDiv.textContent = user.name;
+            infoDiv.appendChild(nameDiv);
+            
+            if (user.gameCount > 0) {
+                const gameCountDiv = document.createElement('div');
+                gameCountDiv.className = 'text-xs text-slate-400';
+                gameCountDiv.textContent = `${user.gameCount} 遊戲`;
+                infoDiv.appendChild(gameCountDiv);
+            }
+            
+            if (user.isShared) {
+                const sharedDiv = document.createElement('div');
+                sharedDiv.className = 'text-xs text-blue-400';
+                sharedDiv.textContent = '共享';
+                infoDiv.appendChild(sharedDiv);
+            }
+            
+            contentDiv.appendChild(infoDiv);
+            card.appendChild(contentDiv);
             
             card.addEventListener('click', () => toggleUser(user));
             
@@ -711,7 +788,27 @@
             'https://thingproxy.freeboard.io/fetch/'
         ];
 
-        // 獲取用戶遊戲 - 真實Steam API調用
+        // 清理和驗證遊戲數據
+        function sanitizeGameData(games) {
+            return games.filter(game => {
+                // 確保必要的字段存在
+                return game && 
+                       game.appid && 
+                       game.name && 
+                       typeof game.name === 'string' &&
+                       game.name.trim().length > 0;
+            }).map(game => {
+                // 清理遊戲數據
+                return {
+                    ...game,
+                    name: game.name.trim(),
+                    playtime_forever: game.playtime_forever || 0,
+                    img_icon_url: game.img_icon_url || ''
+                };
+            });
+        }
+
+        // 獲取用戶遊戲 - 真實Steam API調用（增強版）
         async function fetchUserGames(steamId) {
             const maxRetries = CORS_PROXIES.length;
             
@@ -751,16 +848,18 @@
                         throw new Error('代理響應格式錯誤');
                     }
                     
-                    const games = gameData.response?.games || [];
-                    console.log(`成功載入用戶 ${steamId} 的 ${games.length} 個遊戲`);
-                    return games;
+                    const rawGames = gameData.response?.games || [];
+                    const cleanGames = sanitizeGameData(rawGames);
+                    
+                    console.log(`成功載入用戶 ${steamId} 的 ${cleanGames.length} 個遊戲`);
+                    return cleanGames;
                     
                 } catch (error) {
                     console.error(`代理 ${retryCount + 1} 失敗:`, error.message);
                     
                     if (retryCount === maxRetries - 1) {
                         console.log(`所有代理失敗，使用模擬數據為用戶 ${steamId}`);
-                        return getFallbackGames(steamId);
+                        return sanitizeGameData(getFallbackGames(steamId));
                     }
                 }
             }
@@ -802,34 +901,67 @@
             return gameLibraries[steamId] || [];
         }
 
-        // 計算共同遊戲
+        // 計算共同遊戲（增強版）
         function calculateCommonGames(allUserGames) {
             const gameOccurrences = {};
             
-            allUserGames.forEach((userGames, userIndex) => {
-                userGames.forEach(game => {
-                    if (!gameOccurrences[game.appid]) {
-                        gameOccurrences[game.appid] = {
-                            ...game,
-                            owners: [],
-                            totalPlaytime: 0
-                        };
+            try {
+                allUserGames.forEach((userGames, userIndex) => {
+                    if (!Array.isArray(userGames)) {
+                        console.warn(`用戶 ${userIndex} 的遊戲數據不是陣列:`, userGames);
+                        return;
                     }
-                    gameOccurrences[game.appid].owners.push({
-                        userIndex,
-                        playtime: game.playtime_forever || 0
+                    
+                    userGames.forEach(game => {
+                        try {
+                            // 確保遊戲數據有效
+                            if (!game || !game.appid || !game.name) {
+                                console.warn('跳過無效的遊戲數據:', game);
+                                return;
+                            }
+                            
+                            if (!gameOccurrences[game.appid]) {
+                                gameOccurrences[game.appid] = {
+                                    ...game,
+                                    owners: [],
+                                    totalPlaytime: 0
+                                };
+                            }
+                            
+                            const playtime = game.playtime_forever || 0;
+                            gameOccurrences[game.appid].owners.push({
+                                userIndex,
+                                playtime: playtime
+                            });
+                            gameOccurrences[game.appid].totalPlaytime += playtime;
+                        } catch (error) {
+                            console.error('處理遊戲時發生錯誤:', error, game);
+                        }
                     });
-                    gameOccurrences[game.appid].totalPlaytime += (game.playtime_forever || 0);
                 });
-            });
-            
-            return Object.values(gameOccurrences).map(game => ({
-                ...game,
-                commonality: game.owners.length,
-                commonalityPercentage: Math.round((game.owners.length / selectedUsers.length) * 100),
-                isCommon: game.owners.length >= Math.max(1, Math.ceil(selectedUsers.length * 0.5)),
-                averagePlaytime: Math.round(game.totalPlaytime / game.owners.length)
-            }));
+                
+                const result = Object.values(gameOccurrences).map(game => {
+                    try {
+                        return {
+                            ...game,
+                            commonality: game.owners.length,
+                            commonalityPercentage: Math.round((game.owners.length / selectedUsers.length) * 100),
+                            isCommon: game.owners.length >= Math.max(1, Math.ceil(selectedUsers.length * 0.5)),
+                            averagePlaytime: game.owners.length > 0 ? Math.round(game.totalPlaytime / game.owners.length) : 0
+                        };
+                    } catch (error) {
+                        console.error('計算遊戲統計時發生錯誤:', error, game);
+                        return null;
+                    }
+                }).filter(game => game !== null); // 過濾掉處理失敗的遊戲
+                
+                console.log(`成功計算 ${result.length} 個遊戲的共通度`);
+                return result;
+                
+            } catch (error) {
+                console.error('計算共同遊戲時發生錯誤:', error);
+                return [];
+            }
         }
 
         // 處理搜尋輸入
@@ -914,10 +1046,13 @@
             updateGamesInterface();
         }
 
-        // 更新遊戲界面
+        // 更新遊戲界面（增強版）
         function updateGamesInterface() {
             try {
-                if (!elements.gamesGrid || !elements.emptyState) return;
+                if (!elements.gamesGrid || !elements.emptyState) {
+                    console.warn('遊戲界面元素不存在');
+                    return;
+                }
                 
                 elements.gamesGrid.innerHTML = '';
                 
@@ -928,100 +1063,211 @@
                     elements.emptyState.classList.add('hidden');
                     elements.gamesGrid.classList.remove('hidden');
                     
-                    filteredGames.forEach(game => {
-                        const gameCard = createGameCard(game);
-                        elements.gamesGrid.appendChild(gameCard);
-                    });
+                    // 批量創建遊戲卡片，避免一次性創建太多導致性能問題
+                    const batchSize = 20;
+                    let currentIndex = 0;
+                    
+                    function createNextBatch() {
+                        const endIndex = Math.min(currentIndex + batchSize, filteredGames.length);
+                        
+                        for (let i = currentIndex; i < endIndex; i++) {
+                            try {
+                                const game = filteredGames[i];
+                                if (game && game.name) {
+                                    const gameCard = createGameCard(game);
+                                    if (gameCard) {
+                                        elements.gamesGrid.appendChild(gameCard);
+                                    }
+                                }
+                            } catch (error) {
+                                console.error(`創建遊戲卡片 ${i} 時發生錯誤:`, error, filteredGames[i]);
+                            }
+                        }
+                        
+                        currentIndex = endIndex;
+                        
+                        if (currentIndex < filteredGames.length) {
+                            // 使用 setTimeout 讓瀏覽器有時間處理其他任務
+                            setTimeout(createNextBatch, 10);
+                        } else {
+                            console.log(`成功創建 ${elements.gamesGrid.children.length} 個遊戲卡片`);
+                        }
+                    }
+                    
+                    createNextBatch();
                 }
                 
                 updateStats();
             } catch (error) {
                 console.error('更新遊戲界面失敗:', error);
+                showNotification('顯示遊戲時發生錯誤', 'error');
             }
         }
 
-        // 創建遊戲卡片 - 增強版
+        // 安全的HTML轉義函數
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return unsafe;
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // 創建遊戲卡片 - 增強版（修復字符轉義問題）
         function createGameCard(game) {
             const card = document.createElement('div');
             card.className = 'game-card glass-effect rounded-xl overflow-hidden fade-in';
             
+            // 安全轉義遊戲名稱
+            const safeName = escapeHtml(game.name);
+            const encodedName = encodeURIComponent(game.name);
+            
             const headerImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`;
             const capsuleImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/capsule_231x87.jpg`;
-            const fallbackImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(game.name)}&size=300&background=334155&color=94a3b8`;
+            const fallbackImageUrl = `https://ui-avatars.com/api/?name=${encodedName}&size=300&background=334155&color=94a3b8`;
             
             const gameGenres = getGameGenres(game.appid);
             const commonalityColor = game.commonalityPercentage >= 75 ? 'text-green-400' : 
                                    game.commonalityPercentage >= 50 ? 'text-yellow-400' : 'text-blue-400';
             
-            card.innerHTML = `
-                <div class="relative group">
-                    <img src="${headerImageUrl}" 
-                         alt="${game.name}" 
-                         class="w-full h-32 object-cover transition-transform duration-300 group-hover:scale-105"
-                         onerror="this.onerror=null; this.src='${capsuleImageUrl}'; this.onload=function(){this.onerror=function(){this.src='${fallbackImageUrl}'}}"
-                         onload="this.onerror=function(){this.src='${fallbackImageUrl}'}">
-                    
-                    <div class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                        <div class="text-center text-white p-2">
-                            <p class="text-sm font-medium mb-1">點擊查看Steam商店</p>
-                            <p class="text-xs text-slate-300">App ID: ${game.appid}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="absolute top-2 right-2">
-                        <div class="bg-black/80 backdrop-blur-sm rounded-full px-2 py-1 text-xs font-medium border border-white/20">
-                            <span class="${commonalityColor}">${game.commonality}</span>
-                            <span class="text-slate-300">/${selectedUsers.length}</span>
-                        </div>
-                    </div>
-                    
-                    ${game.isCommon ? '<div class="absolute top-2 left-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-2 py-1 rounded-full text-xs font-medium shadow-lg">共同遊戲</div>' : ''}
-                    ${game.commonalityPercentage >= 75 ? '<div class="absolute bottom-2 left-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">熱門</div>' : ''}
-                </div>
-                
-                <div class="p-4">
-                    <h3 class="font-medium text-sm mb-3 line-clamp-2 leading-tight" title="${game.name}">${game.name}</h3>
-                    
-                    ${gameGenres.length > 0 ? `
-                        <div class="flex flex-wrap gap-1 mb-3">
-                            ${gameGenres.slice(0, 2).map(genre => 
-                                `<span class="px-2 py-1 bg-slate-600/50 text-slate-300 text-xs rounded-full">${genre}</span>`
-                            ).join('')}
-                        </div>
-                    ` : ''}
-                    
-                    <div class="mb-3">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="text-xs text-slate-400">擁有率</span>
-                            <span class="text-xs font-medium ${commonalityColor}">${game.commonalityPercentage}%</span>
-                        </div>
-                        <div class="w-full bg-slate-700 rounded-full h-2">
-                            <div class="bg-gradient-to-r ${getProgressBarColor(game.commonalityPercentage)} h-2 rounded-full transition-all duration-500" 
-                                 style="width: ${game.commonalityPercentage}%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                        <div class="text-center">
-                            <div class="font-medium text-white">${Math.round(game.averagePlaytime / 60)}h</div>
-                            <div>平均時間</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="font-medium text-white">${game.owners.length}</div>
-                            <div>擁有者</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="absolute inset-0 rounded-xl opacity-0 bg-blue-400/20 pointer-events-none transition-opacity duration-200 card-ripple"></div>
-            `;
+            // 創建圖片元素
+            const imgElement = document.createElement('img');
+            imgElement.src = headerImageUrl;
+            imgElement.alt = game.name;
+            imgElement.className = 'w-full h-32 object-cover transition-transform duration-300 group-hover:scale-105';
+            imgElement.onerror = function() {
+                this.onerror = null;
+                this.src = capsuleImageUrl;
+                this.onload = function() {
+                    this.onerror = function() {
+                        this.src = fallbackImageUrl;
+                    }
+                }
+            };
+            imgElement.onload = function() {
+                this.onerror = function() {
+                    this.src = fallbackImageUrl;
+                }
+            };
+
+            // 創建主要內容容器
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'relative group';
             
+            // 添加圖片
+            contentDiv.appendChild(imgElement);
+            
+            // 創建懸停覆蓋層
+            const hoverOverlay = document.createElement('div');
+            hoverOverlay.className = 'absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center';
+            hoverOverlay.innerHTML = `
+                <div class="text-center text-white p-2">
+                    <p class="text-sm font-medium mb-1">點擊查看Steam商店</p>
+                    <p class="text-xs text-slate-300">App ID: ${game.appid}</p>
+                </div>
+            `;
+            contentDiv.appendChild(hoverOverlay);
+            
+            // 創建共通度指示器
+            const indicator = document.createElement('div');
+            indicator.className = 'absolute top-2 right-2';
+            indicator.innerHTML = `
+                <div class="bg-black/80 backdrop-blur-sm rounded-full px-2 py-1 text-xs font-medium border border-white/20">
+                    <span class="${commonalityColor}">${game.commonality}</span>
+                    <span class="text-slate-300">/${selectedUsers.length}</span>
+                </div>
+            `;
+            contentDiv.appendChild(indicator);
+            
+            // 添加標籤
+            if (game.isCommon) {
+                const commonTag = document.createElement('div');
+                commonTag.className = 'absolute top-2 left-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-2 py-1 rounded-full text-xs font-medium shadow-lg';
+                commonTag.textContent = '共同遊戲';
+                contentDiv.appendChild(commonTag);
+            }
+            
+            if (game.commonalityPercentage >= 75) {
+                const popularTag = document.createElement('div');
+                popularTag.className = 'absolute bottom-2 left-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium';
+                popularTag.textContent = '熱門';
+                contentDiv.appendChild(popularTag);
+            }
+            
+            card.appendChild(contentDiv);
+            
+            // 創建詳細資訊區域
+            const detailsDiv = document.createElement('div');
+            detailsDiv.className = 'p-4';
+            
+            // 遊戲標題
+            const titleElement = document.createElement('h3');
+            titleElement.className = 'font-medium text-sm mb-3 line-clamp-2 leading-tight';
+            titleElement.title = game.name;
+            titleElement.textContent = game.name;
+            detailsDiv.appendChild(titleElement);
+            
+            // 遊戲類型標籤
+            if (gameGenres.length > 0) {
+                const genresDiv = document.createElement('div');
+                genresDiv.className = 'flex flex-wrap gap-1 mb-3';
+                gameGenres.slice(0, 2).forEach(genre => {
+                    const genreSpan = document.createElement('span');
+                    genreSpan.className = 'px-2 py-1 bg-slate-600/50 text-slate-300 text-xs rounded-full';
+                    genreSpan.textContent = genre;
+                    genresDiv.appendChild(genreSpan);
+                });
+                detailsDiv.appendChild(genresDiv);
+            }
+            
+            // 進度條區域
+            const progressDiv = document.createElement('div');
+            progressDiv.className = 'mb-3';
+            progressDiv.innerHTML = `
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs text-slate-400">擁有率</span>
+                    <span class="text-xs font-medium ${commonalityColor}">${game.commonalityPercentage}%</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-2">
+                    <div class="bg-gradient-to-r ${getProgressBarColor(game.commonalityPercentage)} h-2 rounded-full transition-all duration-500" 
+                         style="width: ${game.commonalityPercentage}%"></div>
+                </div>
+            `;
+            detailsDiv.appendChild(progressDiv);
+            
+            // 統計資訊
+            const statsDiv = document.createElement('div');
+            statsDiv.className = 'grid grid-cols-2 gap-2 text-xs text-slate-400';
+            statsDiv.innerHTML = `
+                <div class="text-center">
+                    <div class="font-medium text-white">${Math.round(game.averagePlaytime / 60)}h</div>
+                    <div>平均時間</div>
+                </div>
+                <div class="text-center">
+                    <div class="font-medium text-white">${game.owners.length}</div>
+                    <div>擁有者</div>
+                </div>
+            `;
+            detailsDiv.appendChild(statsDiv);
+            
+            card.appendChild(detailsDiv);
+            
+            // 添加點擊效果
+            const ripple = document.createElement('div');
+            ripple.className = 'absolute inset-0 rounded-xl opacity-0 bg-blue-400/20 pointer-events-none transition-opacity duration-200 card-ripple';
+            card.appendChild(ripple);
+            
+            // 事件監聽器
             card.addEventListener('click', (e) => {
-                const ripple = card.querySelector('.card-ripple');
-                ripple.style.opacity = '1';
-                setTimeout(() => {
-                    ripple.style.opacity = '0';
-                }, 200);
+                const rippleElement = card.querySelector('.card-ripple');
+                if (rippleElement) {
+                    rippleElement.style.opacity = '1';
+                    setTimeout(() => {
+                        rippleElement.style.opacity = '0';
+                    }, 200);
+                }
                 
                 window.open(`${STEAM_CONFIG.STORE_BASE}/${game.appid}`, '_blank');
             });
@@ -1389,7 +1635,7 @@
             }
         }
 
-        // 通知系統
+        // 通知系統（修復字符轉義問題）
         function showNotification(message, type = 'info') {
             try {
                 const existingNotification = document.querySelector('.notification');
@@ -1405,16 +1651,30 @@
                     'bg-blue-600'
                 } text-white`;
                 
-                notification.innerHTML = `
-                    <div class="flex items-start space-x-2">
-                        <div class="flex-1 text-sm">${message}</div>
-                        <button class="text-white/80 hover:text-white" onclick="this.parentElement.parentElement.remove()">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                            </svg>
-                        </button>
-                    </div>
+                // 創建內容區域
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'flex items-start space-x-2';
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'flex-1 text-sm';
+                messageDiv.textContent = message;
+                
+                const closeButton = document.createElement('button');
+                closeButton.className = 'text-white/80 hover:text-white';
+                closeButton.innerHTML = `
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                    </svg>
                 `;
+                closeButton.addEventListener('click', () => {
+                    if (notification.parentElement) {
+                        notification.remove();
+                    }
+                });
+                
+                contentDiv.appendChild(messageDiv);
+                contentDiv.appendChild(closeButton);
+                notification.appendChild(contentDiv);
                 
                 document.body.appendChild(notification);
                 
