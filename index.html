@@ -346,10 +346,10 @@
 
         // 共享帳號
         const SHARED_ACCOUNTS = [
-            { id: '76561199470483407', name: '共享帳號 #1', isShared: true },
-            { id: '76561199509330900', name: '共享帳號 #2', isShared: true },
-            { id: '76561199509470809', name: '共享帳號 #3', isShared: true },
-            { id: '76561199509470810', name: '共享帳號 #4', isShared: true }
+            { id: '76561199470483407', name: '共享帳號 #1', isShared: true, avatar: 'https://ui-avatars.com/api/?name=1&background=3b82f6&color=fff' },
+            { id: '76561199509330900', name: '共享帳號 #2', isShared: true, avatar: 'https://ui-avatars.com/api/?name=2&background=8b5cf6&color=fff' },
+            { id: '76561199509470809', name: '共享帳號 #3', isShared: true, avatar: 'https://ui-avatars.com/api/?name=3&background=10b981&color=fff' },
+            { id: '76561199509470810', name: '共享帳號 #4', isShared: true, avatar: 'https://ui-avatars.com/api/?name=4&background=f59e0b&color=fff' }
         ];
 
         // DOM 元素
@@ -395,18 +395,55 @@
 
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuth();
-            await loadUsers();
+            console.log('頁面初始化開始');
+            
+            // 預設選中共享帳號
+            selectedUsers = [...SHARED_ACCOUNTS];
+            allUsers = [...SHARED_ACCOUNTS];
+            
+            // 設置事件監聽器
             setupEventListeners();
             
-            // 首頁預設選中共享帳號並載入遊戲
-            selectedUsers = [...SHARED_ACCOUNTS];
-            switchToPage('welcome');
+            // 檢查認證狀態
+            const isLoggedIn = await checkAuth();
+            
+            if (isLoggedIn) {
+                console.log('用戶已登入，載入用戶資料');
+                await loadUsers();
+                
+                // 檢查用戶是否已連結Steam
+                const { data: userData } = await supabase
+                    .from('users')
+                    .select('steam_id')
+                    .eq('discord_id', currentUser.id)
+                    .single();
+                
+                if (!userData || !userData.steam_id) {
+                    console.log('用戶未連結Steam，切換到Steam連結頁面');
+                    switchToPage('steamLink');
+                } else {
+                    console.log('用戶已連結Steam，切換到主頁面');
+                    switchToPage('main');
+                }
+            } else {
+                console.log('用戶未登入，切換到歡迎頁面');
+                switchToPage('welcome');
+            }
+            
+            // 更新用戶界面
+            updateUserInterface();
+            
+            // 載入遊戲（無論是否登入都要載入共享帳號的遊戲）
+            console.log('開始載入遊戲');
             await loadGamesFromDatabase();
+            
+            console.log('頁面初始化完成');
         });
 
         // 頁面切換
         function switchToPage(page) {
+            console.log('切換到頁面:', page);
+            
             // 隱藏所有頁面
             elements.welcomePage.classList.add('hidden');
             elements.steamLinkPage.classList.add('hidden');
@@ -427,7 +464,6 @@
             }
             
             currentPage = page;
-            updateUserInterface();
         }
 
         // 事件監聽器
@@ -456,25 +492,22 @@
 
         // 認證檢查
         async function checkAuth() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                currentUser = session.user;
-                updateAuthInterface(true);
-                
-                // 檢查用戶是否已連結Steam
-                const { data: userData } = await supabase
-                    .from('users')
-                    .select('steam_id')
-                    .eq('discord_id', currentUser.id)
-                    .single();
-                
-                if (!userData || !userData.steam_id) {
-                    switchToPage('steamLink');
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    currentUser = session.user;
+                    console.log('用戶已登入:', currentUser.email);
+                    updateAuthInterface(true);
+                    return true;
                 } else {
-                    switchToPage('main');
+                    console.log('用戶未登入');
+                    updateAuthInterface(false);
+                    return false;
                 }
-            } else {
-                switchToPage('welcome');
+            } catch (error) {
+                console.error('認證檢查失敗:', error);
+                updateAuthInterface(false);
+                return false;
             }
         }
 
@@ -494,14 +527,24 @@
 
         // 登出
         async function logout() {
-            const { error } = await supabase.auth.signOut();
-            if (error) {
-                console.error('登出錯誤:', error);
-            } else {
-                currentUser = null;
-                updateAuthInterface(false);
-                switchToPage('welcome');
-                showNotification('已成功登出', 'success');
+            try {
+                const { error } = await supabase.auth.signOut();
+                if (error) {
+                    console.error('登出錯誤:', error);
+                    showNotification('登出失敗，請稍後再試', 'error');
+                } else {
+                    currentUser = null;
+                    updateAuthInterface(false);
+                    switchToPage('welcome');
+                    // 重置到共享帳號
+                    selectedUsers = [...SHARED_ACCOUNTS];
+                    await loadUsers();
+                    await loadGamesFromDatabase();
+                    showNotification('已成功登出', 'success');
+                }
+            } catch (error) {
+                console.error('登出過程中發生錯誤:', error);
+                showNotification('登出失敗', 'error');
             }
         }
 
@@ -675,43 +718,57 @@
 
         // 載入用戶
         async function loadUsers() {
+            console.log('開始載入用戶');
+            
             try {
                 // 總是包含共享帳號
                 allUsers = [...SHARED_ACCOUNTS];
+                console.log('載入共享帳號:', allUsers.length);
                 
-                // 載入資料庫中的用戶
-                const { data: users, error } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('is_shared', false);
+                // 如果有登入，載入資料庫中的其他用戶
+                if (currentUser) {
+                    console.log('載入資料庫用戶');
+                    const { data: users, error } = await supabase
+                        .from('users')
+                        .select('*')
+                        .eq('is_shared', false);
+                    
+                    if (!error && users && users.length > 0) {
+                        console.log('從資料庫載入了', users.length, '個用戶');
+                        const dbUsers = users.map(user => ({
+                            id: user.steam_id,
+                            name: user.username,
+                            avatar: user.avatar_url,
+                            gameCount: user.game_count,
+                            isShared: false,
+                            lastSynced: user.last_synced
+                        }));
+                        allUsers = [...allUsers, ...dbUsers];
+                    } else {
+                        console.log('資料庫中沒有其他用戶');
+                    }
+                }
                 
-                if (error) throw error;
-                
-                allUsers = [...allUsers, ...users.map(user => ({
-                    id: user.steam_id,
-                    name: user.username,
-                    avatar: user.avatar_url,
-                    gameCount: user.game_count,
-                    isShared: false,
-                    lastSynced: user.last_synced
-                }))];
-                
+                console.log('最終用戶列表:', allUsers.map(u => u.name));
                 updateUserInterface();
+                
             } catch (error) {
                 console.error('載入用戶失敗:', error);
                 showNotification('載入用戶資料失敗', 'error');
+                // 即使失敗也要確保共享帳號可用
+                allUsers = [...SHARED_ACCOUNTS];
+                updateUserInterface();
             }
         }
 
         // 更新用戶界面
         function updateUserInterface() {
-            if (currentPage === 'welcome' || currentPage === 'steamLink') {
-                return;
-            }
+            console.log('更新用戶界面，用戶數量:', allUsers.length);
             
             elements.userList.innerHTML = '';
             
             allUsers.forEach(user => {
+                console.log('創建用戶卡片:', user.name);
                 const userCard = createUserCard(user);
                 elements.userList.appendChild(userCard);
             });
@@ -844,7 +901,10 @@
                     .eq('steam_id', steamId)
                     .single();
 
-                if (!userData) return;
+                if (!userData) {
+                    console.error(`用戶 ${steamId} 不存在於資料庫中`);
+                    return;
+                }
 
                 const userId = userData.id;
 
@@ -854,25 +914,32 @@
                     .delete()
                     .eq('user_id', userId);
 
-                // 批量插入遊戲
-                for (const game of games) {
+                // 批量處理遊戲
+                const batchSize = 50; // 每批處理50個遊戲
+                for (let i = 0; i < games.length; i += batchSize) {
+                    const batch = games.slice(i, i + batchSize);
+                    
                     // 確保遊戲存在於games表
+                    const gameUpserts = batch.map(game => ({
+                        steam_app_id: game.appid,
+                        name: game.name,
+                        header_image: `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`
+                    }));
+                    
                     await supabase
                         .from('games')
-                        .upsert({
-                            steam_app_id: game.appid,
-                            name: game.name,
-                            header_image: `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`
-                        });
+                        .upsert(gameUpserts, { onConflict: 'steam_app_id' });
 
                     // 插入用戶遊戲關聯
+                    const userGameInserts = batch.map(game => ({
+                        user_id: userId,
+                        game_id: game.appid, // 這裡應該是steam_app_id，但表結構設計時可能有問題
+                        playtime_forever: game.playtime_forever || 0
+                    }));
+                    
                     await supabase
                         .from('user_games')
-                        .insert({
-                            user_id: userId,
-                            game_id: game.appid,
-                            playtime_forever: game.playtime_forever || 0
-                        });
+                        .insert(userGameInserts);
                 }
 
                 // 更新用戶統計
@@ -894,30 +961,37 @@
         // 從資料庫載入遊戲
         async function loadGamesFromDatabase() {
             if (selectedUsers.length === 0) {
+                console.log('沒有選中的用戶');
                 allGames = [];
                 filteredGames = [];
                 updateGamesInterface();
                 return;
             }
             
+            console.log('載入遊戲，選中用戶:', selectedUsers.map(u => u.name));
             showLoading(true);
             
             try {
                 const userGames = [];
                 
                 for (const user of selectedUsers) {
+                    console.log('正在載入用戶遊戲:', user.name);
+                    
                     if (user.isShared) {
                         // 共享帳號直接從Steam API獲取
                         const games = await fetchUserGames(user.id);
+                        console.log(`共享帳號 ${user.name} 遊戲數量:`, games.length);
                         userGames.push(games);
                     } else {
                         // 一般用戶從資料庫獲取
                         const games = await fetchUserGamesFromDatabase(user.id);
+                        console.log(`用戶 ${user.name} 遊戲數量:`, games.length);
                         userGames.push(games);
                     }
                 }
                 
                 allGames = calculateCommonGames(userGames);
+                console.log('計算出的遊戲總數:', allGames.length);
                 filterGames();
                 
             } catch (error) {
@@ -934,6 +1008,19 @@
         // 從資料庫獲取用戶遊戲
         async function fetchUserGamesFromDatabase(steamId) {
             try {
+                // 先獲取用戶ID
+                const { data: userData } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('steam_id', steamId)
+                    .single();
+
+                if (!userData) {
+                    console.log(`用戶 ${steamId} 不存在於資料庫中`);
+                    return [];
+                }
+
+                // 獲取用戶遊戲
                 const { data: userGames, error } = await supabase
                     .from('user_games')
                     .select(`
@@ -944,16 +1031,18 @@
                             header_image
                         )
                     `)
-                    .eq('users.steam_id', steamId)
-                    .join('users', 'user_games.user_id', 'users.id');
+                    .eq('user_id', userData.id);
 
-                if (error) throw error;
+                if (error) {
+                    console.error('獲取用戶遊戲失敗:', error);
+                    return [];
+                }
 
                 return userGames.map(item => ({
                     appid: item.games.steam_app_id,
                     name: item.games.name,
                     playtime_forever: item.playtime_forever,
-                    img_icon_url: `${item.games.steam_app_id}_icon` // 簡化處理
+                    img_icon_url: `${item.games.steam_app_id}_icon`
                 }));
                 
             } catch (error) {
@@ -1130,6 +1219,13 @@
             elements.commonGames.textContent = allGames.filter(g => g.isCommon).length;
             elements.selectedUsers.textContent = selectedUsers.length;
             elements.showingGames.textContent = filteredGames.length;
+            
+            console.log('統計更新:', {
+                totalGames: allGames.length,
+                commonGames: allGames.filter(g => g.isCommon).length,
+                selectedUsers: selectedUsers.length,
+                showingGames: filteredGames.length
+            });
         }
 
         // 顯示載入狀態
@@ -1185,6 +1281,8 @@
 
         // 監聽認證狀態變化
         supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('認證狀態變化:', event, session ? '已登入' : '未登入');
+            
             if (event === 'SIGNED_IN') {
                 currentUser = session.user;
                 updateAuthInterface(true);
@@ -1207,10 +1305,17 @@
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
                 updateAuthInterface(false);
+                
+                // 重置狀態
                 selectedUsers = [...SHARED_ACCOUNTS];
+                allUsers = [...SHARED_ACCOUNTS];
+                
+                // 切換到歡迎頁面並重新載入
                 switchToPage('welcome');
-                await loadUsers();
+                updateUserInterface();
                 await loadGamesFromDatabase();
+                
+                showNotification('已成功登出', 'success');
             }
         });
     </script>
