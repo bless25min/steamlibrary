@@ -835,21 +835,37 @@
 
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
+            console.log('頁面初始化開始');
+            
+            // 檢查現有認證狀態
             await checkAuth();
+            
+            // 載入用戶
             await loadUsers();
+            
+            // 設定事件監聽器
             setupEventListeners();
             
             // 預設選中共享帳號
             selectedUsers = [...SHARED_ACCOUNTS];
             updateUserInterface();
+            
+            // 載入遊戲
             await loadGames();
+            
+            console.log('頁面初始化完成');
         });
 
         // 事件監聽器
         function setupEventListeners() {
+            console.log('設定事件監聽器');
+            
             elements.loginBtn.addEventListener('click', login);
             elements.logoutBtn.addEventListener('click', logout);
-            elements.linkSteamBtn.addEventListener('click', showSteamLinkModal);
+            elements.linkSteamBtn.addEventListener('click', () => {
+                console.log('點擊連結Steam按鈕');
+                showSteamLinkModal();
+            });
             elements.selectAllBtn.addEventListener('click', selectAllUsers);
             elements.deselectAllBtn.addEventListener('click', deselectAllUsers);
             elements.searchInput.addEventListener('input', debounce(filterGames, 300));
@@ -869,15 +885,30 @@
                     filterGames();
                 });
             });
+            
+            // 排序選擇事件
+            elements.sortSelect.addEventListener('change', (e) => {
+                currentSort = e.target.value;
+                sortGames();
+            });
         }
 
         // 認證檢查
         async function checkAuth() {
+            console.log('檢查認證狀態');
             const { data: { session } } = await supabase.auth.getSession();
+            
             if (session) {
+                console.log('發現現有session:', session.user.id);
                 currentUser = session.user;
                 updateAuthInterface(true);
+                
+                // 檢查Steam連結狀態
                 await checkSteamLinkStatus();
+            } else {
+                console.log('沒有現有session');
+                // 確保Steam連結橫幅隱藏
+                elements.steamLinkBanner.classList.add('hidden');
             }
         }
 
@@ -892,25 +923,51 @@
                     .eq('discord_id', currentUser.id)
                     .single();
 
+                console.log('檢查Steam連結狀態:', { userData, error });
+
                 if (error || !userData?.steam_id) {
+                    console.log('顯示Steam連結橫幅');
                     elements.steamLinkBanner.classList.remove('hidden');
                 } else {
+                    console.log('隱藏Steam連結橫幅，Steam ID:', userData.steam_id);
                     elements.steamLinkBanner.classList.add('hidden');
                 }
             } catch (error) {
                 console.error('檢查Steam連結狀態失敗:', error);
+                // 如果出錯，默認顯示連結橫幅
+                elements.steamLinkBanner.classList.remove('hidden');
             }
         }
 
         // 顯示Steam連結模態框
         function showSteamLinkModal() {
+            console.log('顯示Steam連結模態框');
             elements.steamLinkModal.classList.remove('hidden');
         }
 
         // 隱藏Steam連結模態框
         function hideSteamLinkModal() {
+            console.log('隱藏Steam連結模態框');
             elements.steamLinkModal.classList.add('hidden');
             elements.steamProfileInput.value = '';
+        }
+
+        // 提取Steam ID
+        function extractSteamId(profileUrl) {
+            const patterns = [
+                /steamcommunity\.com\/profiles\/(\d+)/,
+                /steamcommunity\.com\/id\/([^\/]+)/
+            ];
+
+            for (const pattern of patterns) {
+                const match = profileUrl.match(pattern);
+                if (match) {
+                    console.log('提取的Steam ID:', match[1]);
+                    return match[1];
+                }
+            }
+            console.log('無法提取Steam ID from:', profileUrl);
+            return null;
         }
 
         // 儲存Steam連結
@@ -927,43 +984,46 @@
                 return;
             }
 
+            console.log('準備儲存Steam連結:', {
+                discordId: currentUser.id,
+                steamId: steamId,
+                profileUrl: profileUrl
+            });
+
             try {
-                const { error } = await supabase
+                const { data, error } = await supabase
                     .from('users')
                     .upsert({
                         discord_id: currentUser.id,
-                        username: currentUser.user_metadata.full_name || currentUser.email,
+                        username: currentUser.user_metadata.full_name || currentUser.user_metadata.name || currentUser.email,
                         avatar_url: currentUser.user_metadata.avatar_url,
                         steam_id: steamId,
-                        steam_profile_url: profileUrl
+                        steam_profile_url: profileUrl,
+                        is_shared: false
+                    }, {
+                        onConflict: 'discord_id'
                     });
 
-                if (error) throw error;
+                if (error) {
+                    console.error('儲存Steam連結錯誤:', error);
+                    throw error;
+                }
 
+                console.log('Steam連結儲存成功:', data);
                 showNotification('Steam帳號連結成功！', 'success');
                 hideSteamLinkModal();
                 elements.steamLinkBanner.classList.add('hidden');
+                
+                // 重新載入用戶資料
                 await loadUsers();
+                
+                // 重新載入遊戲資料
+                await loadGames();
+                
             } catch (error) {
                 console.error('儲存Steam連結失敗:', error);
-                showNotification('儲存失敗，請稍後再試', 'error');
+                showNotification('儲存失敗：' + error.message, 'error');
             }
-        }
-
-        // 提取Steam ID
-        function extractSteamId(profileUrl) {
-            const patterns = [
-                /steamcommunity\.com\/profiles\/(\d+)/,
-                /steamcommunity\.com\/id\/([^\/]+)/
-            ];
-
-            for (const pattern of patterns) {
-                const match = profileUrl.match(pattern);
-                if (match) {
-                    return match[1];
-                }
-            }
-            return null;
         }
 
         // 登入
@@ -1023,15 +1083,26 @@
                         .select('*')
                         .neq('is_shared', true);
                     
-                    if (error) throw error;
+                    if (error) {
+                        console.error('載入用戶失敗:', error);
+                        throw error;
+                    }
                     
-                    allUsers = [...allUsers, ...users.map(user => ({
-                        id: user.steam_id,
-                        name: user.username,
-                        avatar: user.avatar_url,
-                        gameCount: user.game_count,
-                        isShared: false
-                    }))];
+                    console.log('從資料庫載入的用戶:', users);
+                    
+                    // 只添加有有效Steam ID的用戶
+                    const validUsers = users
+                        .filter(user => user.steam_id && user.steam_id.length > 0)
+                        .map(user => ({
+                            id: user.steam_id,
+                            name: user.username,
+                            avatar: user.avatar_url,
+                            gameCount: user.game_count,
+                            isShared: false
+                        }));
+                    
+                    console.log('有效用戶:', validUsers);
+                    allUsers = [...allUsers, ...validUsers];
                 }
                 
                 updateUserInterface();
@@ -1405,20 +1476,31 @@
         });
 
         // 監聽認證狀態變化
-        supabase.auth.onAuthStateChange((event, session) => {
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('認證狀態變化:', event, session?.user?.id);
+            
             if (event === 'SIGNED_IN') {
                 currentUser = session.user;
+                console.log('用戶登入成功:', currentUser);
                 updateAuthInterface(true);
-                checkSteamLinkStatus();
-                loadUsers();
+                
+                // 檢查Steam連結狀態
+                await checkSteamLinkStatus();
+                
+                // 載入用戶
+                await loadUsers();
+                
                 showNotification('登入成功！', 'success');
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
                 updateAuthInterface(false);
                 elements.steamLinkBanner.classList.add('hidden');
+                
                 // 重置到只有共享帳號
                 selectedUsers = [...SHARED_ACCOUNTS];
-                loadUsers();
+                await loadUsers();
+                
+                showNotification('已成功登出', 'success');
             }
         });
     </script>
