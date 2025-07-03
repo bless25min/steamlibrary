@@ -25,13 +25,11 @@
             -webkit-line-clamp: 2;
         }
         
-        /* 確保深色背景 */
         body {
             background-color: #111827;
             color: white;
         }
         
-        /* 載入動畫 */
         .animate-spin {
             animation: spin 1s linear infinite;
         }
@@ -41,7 +39,6 @@
             to { transform: rotate(360deg); }
         }
 
-        /* 滾動條樣式 */
         ::-webkit-scrollbar {
             width: 8px;
         }
@@ -143,7 +140,7 @@
           steamApiKey: '274411C2579E7E7CB7482A4BDEAB1077'
         };
 
-        // Steam API 工具函數
+        // Steam API 工具函數（真實API調用）
         const SteamAPI = {
           parseSteamUrl: (url) => {
             const patterns = [
@@ -164,35 +161,64 @@
             return null;
           },
 
+          // 真實的 Steam API 調用 - 解析自訂ID為Steam ID
           resolveVanityUrl: async (vanityName) => {
-            return '76561198' + Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
+            try {
+              const response = await fetch(`https://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=${SUPABASE_CONFIG.steamApiKey}&vanityurl=${vanityName}`);
+              const data = await response.json();
+              
+              if (data.response && data.response.success === 1) {
+                return data.response.steamid;
+              }
+              return null;
+            } catch (error) {
+              console.error('解析Steam自訂ID失敗:', error);
+              return null;
+            }
           },
 
+          // 真實的 Steam API 調用 - 獲取用戶遊戲庫
           getOwnedGames: async (steamId) => {
-            const baseGames = [
-              { appid: 730, name: 'Counter-Strike 2' },
-              { appid: 1086940, name: 'Baldur\'s Gate 3' },
-              { appid: 1245620, name: 'ELDEN RING' },
-              { appid: 570, name: 'Dota 2' },
-              { appid: 813780, name: 'Age of Empires IV' },
-              { appid: 271590, name: 'Grand Theft Auto V' },
-              { appid: 292030, name: 'The Witcher 3: Wild Hunt' },
-              { appid: 582010, name: 'Monster Hunter: World' },
-              { appid: 431960, name: 'Wallpaper Engine' },
-              { appid: 1174180, name: 'Red Dead Redemption 2' },
-              { appid: 1938090, name: 'Call of Duty®: Modern Warfare® II' }
-            ];
+            try {
+              const response = await fetch(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${SUPABASE_CONFIG.steamApiKey}&steamid=${steamId}&format=json&include_appinfo=1`);
+              const data = await response.json();
+              
+              if (data.response && data.response.games) {
+                return data.response.games.map(game => ({
+                  appid: game.appid,
+                  name: game.name,
+                  playtime_forever: game.playtime_forever || 0,
+                  header_image: `https://cdn.akamai.steamstatic.com/steam/apps/${game.appid}/header.jpg`
+                }));
+              }
+              return [];
+            } catch (error) {
+              console.error('獲取Steam遊戲庫失敗:', error);
+              // 由於CORS限制，在瀏覽器中直接調用Steam API可能失敗
+              // 實際部署時應該通過後端代理調用
+              throw new Error('需要後端代理來調用Steam API，避免CORS問題');
+            }
+          },
 
-            const selectedCount = Math.floor(Math.random() * 4) + 5;
-            const selectedGames = [...baseGames]
-              .sort(() => 0.5 - Math.random())
-              .slice(0, selectedCount);
-
-            return selectedGames.map(game => ({
-              ...game,
-              playtime_forever: Math.floor(Math.random() * 2000) + 50,
-              header_image: `https://cdn.akamai.steamstatic.com/steam/apps/${game.appid}/header.jpg`
-            }));
+          // 獲取遊戲詳細信息
+          getGameDetails: async (appId) => {
+            try {
+              const response = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appId}`);
+              const data = await response.json();
+              
+              if (data[appId] && data[appId].success) {
+                const gameData = data[appId].data;
+                return {
+                  name: gameData.name,
+                  header_image: gameData.header_image,
+                  short_description: gameData.short_description
+                };
+              }
+              return null;
+            } catch (error) {
+              console.error('獲取遊戲詳情失敗:', error);
+              return null;
+            }
           }
         };
 
@@ -232,28 +258,7 @@
                   await initializeAuth();
                   await loadData();
                 } else {
-                  console.log('使用模擬數據');
-                  setUsers([
-                    {
-                      id: 'shared_1',
-                      username: '共享帳號 #1',
-                      avatar_url: 'https://ui-avatars.com/api/?name=S1&background=3b82f6&color=fff',
-                      steam_profile_url: 'https://steamcommunity.com/profiles/76561199470483407/',
-                      game_count: 12,
-                      total_playtime: 456,
-                      is_shared: true
-                    }
-                  ]);
-                  setGames([
-                    {
-                      id: 'game_1',
-                      steam_app_id: '730',
-                      name: 'Counter-Strike 2',
-                      header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg',
-                      owners: ['共享帳號 #1'],
-                      playtime: { '共享帳號 #1': 146 }
-                    }
-                  ]);
+                  console.log('Supabase 未初始化');
                 }
               } catch (error) {
                 console.error('初始化失敗:', error);
@@ -301,11 +306,17 @@
 
               if (userData) {
                 setUser(userData);
+                // 如果用戶還沒有設置Steam，顯示設置表單
+                if (!userData.steam_id) {
+                  setShowSteamForm(true);
+                }
               } else {
+                // 創建新用戶
                 const newUser = {
                   discord_id: authUser.user_metadata.provider_id,
                   username: authUser.user_metadata.full_name || authUser.user_metadata.preferred_username,
-                  avatar_url: authUser.user_metadata.avatar_url
+                  avatar_url: authUser.user_metadata.avatar_url,
+                  is_shared: false
                 };
 
                 const { data: createdUser, error: createError } = await supabase
@@ -328,22 +339,33 @@
             if (!supabase) return;
             
             try {
+              // 載入用戶數據 - 根據登入狀態決定顯示範圍
               const { data: usersData } = await supabase
                 .from('users')
                 .select('*')
                 .order('created_at', { ascending: false });
               
               if (usersData) {
-                setUsers(user ? usersData : usersData.filter(u => u.is_shared));
+                if (!user) {
+                  // 🔒 未登入：只顯示共享帳號
+                  setUsers(usersData.filter(u => u.is_shared === true));
+                } else if (!user.steam_id) {
+                  // 🔒 已登入但未設置Steam：只顯示共享帳號
+                  setUsers(usersData.filter(u => u.is_shared === true));
+                } else {
+                  // ✅ 已登入且已設置Steam：顯示所有用戶
+                  setUsers(usersData);
+                }
               }
 
+              // 載入遊戲數據 - 根據權限決定顯示範圍
               const { data: gamesData } = await supabase
                 .from('games')
                 .select(`
                   *,
                   user_games (
                     playtime_forever,
-                    user:users (username)
+                    user:users (username, is_shared)
                   )
                 `);
               
@@ -358,12 +380,33 @@
                     }
                   });
 
-                  if (!user) {
-                    const sharedOwners = owners.filter(owner => owner.includes('共享帳號'));
+                  if (!user || !user.steam_id) {
+                    // 🔒 未登入或未設置Steam：只顯示共享帳號的遊戲
+                    const sharedOwners = [];
+                    const sharedPlaytime = {};
+                    
+                    game.user_games?.forEach(ug => {
+                      if (ug.user?.is_shared && ug.user?.username) {
+                        sharedOwners.push(ug.user.username);
+                        if (ug.playtime_forever) {
+                          sharedPlaytime[ug.user.username] = Math.round(ug.playtime_forever / 60);
+                        }
+                      }
+                    });
+                    
                     if (sharedOwners.length === 0) return null;
-                    owners = sharedOwners;
+                    
+                    return {
+                      id: game.id,
+                      steam_app_id: game.steam_app_id,
+                      name: game.name,
+                      header_image: game.header_image,
+                      owners: sharedOwners,
+                      playtime: sharedPlaytime
+                    };
                   }
 
+                  // ✅ 已登入且已設置Steam：顯示所有遊戲
                   return {
                     id: game.id,
                     steam_app_id: game.steam_app_id,
@@ -412,11 +455,14 @@
           };
 
           const saveSteamProfile = async () => {
-            if (!steamUrl || !supabase) return;
+            if (!steamUrl || !supabase || !user) {
+              alert('請輸入Steam個人頁面連結');
+              return;
+            }
 
             const parsedUrl = SteamAPI.parseSteamUrl(steamUrl);
             if (!parsedUrl) {
-              alert('無效的Steam連結格式');
+              alert('無效的Steam連結格式\n支援格式:\n• https://steamcommunity.com/id/你的ID/\n• https://steamcommunity.com/profiles/數字ID/');
               return;
             }
 
@@ -426,34 +472,100 @@
             try {
               let steamId = parsedUrl.steamId;
               
+              // 如果是自訂ID，需要解析為Steam ID
               if (parsedUrl.type === 'custom_id') {
+                setSyncStatus('解析自訂ID中...');
                 steamId = await SteamAPI.resolveVanityUrl(parsedUrl.identifier);
+                if (!steamId) {
+                  alert('無法解析Steam自訂ID，請確認ID是否正確或稍後再試');
+                  return;
+                }
               }
 
-              const games = await SteamAPI.getOwnedGames(steamId);
-              const totalPlaytime = Math.round(games.reduce((total, game) => total + game.playtime_forever, 0) / 60);
+              setSyncStatus('同步遊戲庫中...');
+              
+              try {
+                // 🎮 真實調用Steam API獲取遊戲庫
+                const games = await SteamAPI.getOwnedGames(steamId);
+                const totalPlaytime = Math.round(games.reduce((total, game) => total + game.playtime_forever, 0) / 60);
 
-              const { data: updatedUser } = await supabase
-                .from('users')
-                .update({
-                  steam_id: steamId,
-                  steam_profile_url: steamUrl,
-                  game_count: games.length,
-                  total_playtime: totalPlaytime
-                })
-                .eq('id', user.id)
-                .select()
-                .single();
+                setSyncStatus('儲存用戶資料中...');
 
-              if (updatedUser) {
+                // 更新用戶Steam資料
+                const { data: updatedUser, error: updateError } = await supabase
+                  .from('users')
+                  .update({
+                    steam_id: steamId,
+                    steam_profile_url: steamUrl,
+                    game_count: games.length,
+                    total_playtime: totalPlaytime
+                  })
+                  .eq('id', user.id)
+                  .select()
+                  .single();
+
+                if (updateError) throw updateError;
+
+                setSyncStatus('儲存遊戲資料中...');
+
+                // 插入遊戲到遊戲表並建立關聯
+                for (const game of games) {
+                  // 先插入或更新遊戲
+                  const { data: gameData, error: gameError } = await supabase
+                    .from('games')
+                    .upsert({
+                      steam_app_id: game.appid.toString(),
+                      name: game.name,
+                      header_image: game.header_image
+                    }, {
+                      onConflict: 'steam_app_id'
+                    })
+                    .select()
+                    .single();
+
+                  if (gameError) {
+                    console.log(`插入遊戲 ${game.name} 失敗:`, gameError);
+                    continue;
+                  }
+
+                  // 建立用戶遊戲關聯
+                  await supabase
+                    .from('user_games')
+                    .upsert({
+                      user_id: updatedUser.id,
+                      game_id: gameData.id,
+                      playtime_forever: game.playtime_forever
+                    }, {
+                      onConflict: 'user_id,game_id'
+                    });
+                }
+
                 setUser(updatedUser);
                 setSyncStatus('同步完成！');
+                
+                // 重新載入數據以顯示完整內容
                 await loadData();
-                alert(`Steam資料同步成功！\n遊戲數量: ${games.length}\n總遊戲時間: ${totalPlaytime} 小時`);
+                
+                alert(`Steam資料同步成功！\n遊戲數量: ${games.length}\n總遊戲時間: ${totalPlaytime} 小時\n\n現在你可以查看群組所有成員的遊戲庫了！`);
+                
                 setShowSteamForm(false);
                 setSteamUrl('');
+                
+              } catch (steamError) {
+                // Steam API調用失敗的處理
+                console.error('Steam API調用失敗:', steamError);
+                setSyncStatus('Steam API調用失敗');
+                
+                if (steamError.message.includes('CORS')) {
+                  alert('由於瀏覽器安全限制，無法直接調用Steam API。\n請聯繫管理員設置後端代理服務，或在實際部署環境中使用。');
+                } else {
+                  alert('Steam API調用失敗，請稍後重試或檢查Steam個人頁面是否為公開狀態。');
+                }
               }
+              
             } catch (error) {
+              console.error('同步Steam資料失敗:', error);
+              setSyncStatus('同步失敗');
               alert('同步失敗: ' + error.message);
             } finally {
               setSyncLoading(false);
@@ -488,6 +600,10 @@
 
           const filteredGames = getFilteredGames();
 
+          // 檢查用戶權限狀態
+          const hasFullAccess = user && user.steam_id;
+          const isLoggedIn = !!user;
+
           if (loading) {
             return React.createElement('div', { className: "min-h-screen bg-gray-900 text-white flex items-center justify-center" },
               React.createElement('div', { className: "text-center" },
@@ -498,6 +614,28 @@
           }
 
           return React.createElement('div', { className: "min-h-screen bg-gray-900 text-white" },
+            // 權限提示橫幅
+            !hasFullAccess && React.createElement('div', { className: "bg-blue-900 border-b border-blue-700 px-4 py-3" },
+              React.createElement('div', { className: "max-w-7xl mx-auto flex items-center justify-between" },
+                React.createElement('div', { className: "flex items-center space-x-3" },
+                  React.createElement(Icons.AlertTriangle, { className: "w-5 h-5 text-blue-400" }),
+                  React.createElement('span', { className: "text-blue-200" },
+                    !isLoggedIn 
+                      ? '目前只能查看共享帳號的遊戲庫，登入Discord並連結Steam後可查看群組所有成員的遊戲庫'
+                      : '請連結你的Steam帳號以查看群組所有成員的遊戲庫'
+                  )
+                ),
+                !isLoggedIn && React.createElement('button', {
+                  onClick: signInWithDiscord,
+                  className: "bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm transition-colors"
+                }, 'Discord 登入'),
+                isLoggedIn && !user.steam_id && React.createElement('button', {
+                  onClick: () => setShowSteamForm(true),
+                  className: "bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm transition-colors"
+                }, '連結 Steam')
+              )
+            ),
+
             // 頂部導航
             React.createElement('div', { className: "bg-gray-800 border-b border-gray-700" },
               React.createElement('div', { className: "max-w-7xl mx-auto px-4 py-4" },
@@ -509,7 +647,7 @@
                     React.createElement('div', null,
                       React.createElement('h1', { className: "text-xl font-bold" }, 'Steam 遊戲庫共享平台'),
                       React.createElement('p', { className: "text-sm text-gray-400" }, 
-                        `群組遊戲庫 • ${users.length} 位玩家 • ${games.length} 款遊戲`
+                        `${hasFullAccess ? '群組完整遊戲庫' : '共享帳號遊戲庫'} • ${users.length} 位${hasFullAccess ? '玩家' : '共享帳號'} • ${games.length} 款遊戲`
                       )
                     )
                   ),
@@ -521,12 +659,18 @@
                           alt: user.username, 
                           className: "w-8 h-8 rounded-full" 
                         }),
-                        React.createElement('span', { className: "text-sm font-medium" }, user.username)
+                        React.createElement('div', { className: "text-right" },
+                          React.createElement('div', { className: "text-sm font-medium" }, user.username),
+                          React.createElement('div', { className: "text-xs text-gray-400" }, 
+                            user.steam_id ? '已連結Steam' : '未連結Steam'
+                          )
+                        )
                       ),
                       React.createElement('button', { 
                         key: 'logout',
                         onClick: signOut,
-                        className: "text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition-colors"
+                        className: "text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition-colors",
+                        title: "登出"
                       }, React.createElement(Icons.LogOut))
                     ] : React.createElement('button', {
                       onClick: signInWithDiscord,
@@ -557,7 +701,7 @@
                   className: `px-6 py-3 rounded-md transition-colors flex items-center space-x-2 ${activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`
                 },
                   React.createElement(Icons.Users),
-                  React.createElement('span', null, `玩家列表 (${users.length})`)
+                  React.createElement('span', null, `${hasFullAccess ? '群組玩家' : '共享帳號'} (${users.length})`)
                 ),
                 user && React.createElement('button', {
                   onClick: () => setActiveTab('profile'),
@@ -589,7 +733,7 @@
                     },
                       React.createElement('option', { value: "all" }, '所有遊戲'),
                       React.createElement('option', { value: "popular" }, '熱門遊戲 (2+人擁有)'),
-                      user && React.createElement('option', { value: "mine" }, '我的遊戲')
+                      hasFullAccess && React.createElement('option', { value: "mine" }, '我的遊戲')
                     ),
                     React.createElement('select', {
                       value: sortBy,
@@ -602,7 +746,8 @@
                     )
                   ),
                   React.createElement('div', { className: "mt-4 text-sm text-gray-400" },
-                    `顯示 ${filteredGames.length} / ${games.length} 款遊戲`
+                    `顯示 ${filteredGames.length} / ${games.length} 款遊戲`,
+                    !hasFullAccess && React.createElement('span', { className: "ml-2 text-blue-400" }, '(僅共享帳號)')
                   )
                 ),
                 
@@ -639,7 +784,9 @@
                               game.owners.map(owner =>
                                 React.createElement('span', { 
                                   key: owner, 
-                                  className: "bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs" 
+                                  className: `px-2 py-1 rounded text-xs ${
+                                    owner.includes('共享帳號') ? 'bg-blue-600 text-blue-100' : 'bg-green-600 text-green-100'
+                                  }` 
                                 }, owner)
                               )
                             )
@@ -666,15 +813,22 @@
 
                 filteredGames.length === 0 && React.createElement('div', { className: "text-center py-12" },
                   React.createElement(Icons.GamepadIcon, { className: "w-16 h-16 text-gray-400 mx-auto mb-4" }),
-                  React.createElement('p', { className: "text-gray-400 text-lg" }, '沒有找到符合條件的遊戲')
+                  React.createElement('p', { className: "text-gray-400 text-lg" }, '沒有找到符合條件的遊戲'),
+                  !hasFullAccess && React.createElement('p', { className: "text-gray-500 text-sm mt-2" }, 
+                    '登入並連結Steam帳號以查看更多遊戲'
+                  )
                 )
               ),
 
               // 玩家列表頁面
               activeTab === 'users' && React.createElement('div', null,
                 React.createElement('div', { className: "flex items-center justify-between mb-6" },
-                  React.createElement('h2', { className: "text-2xl font-bold" }, '社群玩家'),
-                  React.createElement('div', { className: "text-sm text-gray-400" }, `共 ${users.length} 位玩家加入平台`)
+                  React.createElement('h2', { className: "text-2xl font-bold" }, 
+                    hasFullAccess ? '群組玩家' : '共享帳號'
+                  ),
+                  React.createElement('div', { className: "text-sm text-gray-400" }, 
+                    `共 ${users.length} 位${hasFullAccess ? '玩家' : '共享帳號'}加入平台`
+                  )
                 ),
                 React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" },
                   users.map(userData =>
@@ -700,7 +854,7 @@
                             userData.id === user?.id && React.createElement('span', { className: "bg-green-600 text-green-100 px-2 py-1 rounded text-xs" }, '你')
                           ),
                           React.createElement('p', { className: "text-sm text-gray-400" },
-                            userData.is_shared ? '共享帳號' : `加入於 ${userData.created_at}`
+                            userData.is_shared ? '共享帳號' : `加入於 ${new Date(userData.created_at).toLocaleDateString()}`
                           )
                         )
                       ),
@@ -741,52 +895,88 @@
                     React.createElement('span', null, '連結Steam帳號')
                   )
                 ),
-                React.createElement('div', { className: "bg-gray-800 rounded-lg p-6 border border-gray-700 text-center" },
-                  React.createElement('img', {
-                    src: user.avatar_url,
-                    alt: user.username,
-                    className: "w-20 h-20 rounded-full mx-auto mb-4"
-                  }),
-                  React.createElement('h3', { className: "text-xl font-bold mb-2" }, user.username),
-                  React.createElement('p', { className: "text-gray-400 text-sm mb-4" }, 'Discord 用戶'),
-                  React.createElement('div', { className: "grid grid-cols-2 gap-4 mb-4" },
+                React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-6" },
+                  React.createElement('div', { className: "bg-gray-800 rounded-lg p-6 border border-gray-700" },
                     React.createElement('div', { className: "text-center" },
-                      React.createElement('div', { className: "text-2xl font-bold text-blue-400" }, user.game_count || 0),
-                      React.createElement('div', { className: "text-xs text-gray-400" }, '遊戲數量')
-                    ),
-                    React.createElement('div', { className: "text-center" },
-                      React.createElement('div', { className: "text-2xl font-bold text-purple-400" }, user.total_playtime || 0),
-                      React.createElement('div', { className: "text-xs text-gray-400" }, '總遊戲時間')
+                      React.createElement('img', {
+                        src: user.avatar_url,
+                        alt: user.username,
+                        className: "w-20 h-20 rounded-full mx-auto mb-4"
+                      }),
+                      React.createElement('h3', { className: "text-xl font-bold mb-2" }, user.username),
+                      React.createElement('p', { className: "text-gray-400 text-sm mb-4" }, 'Discord 用戶'),
+                      React.createElement('div', { className: "grid grid-cols-2 gap-4 mb-4" },
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-2xl font-bold text-blue-400" }, user.game_count || 0),
+                          React.createElement('div', { className: "text-xs text-gray-400" }, '遊戲數量')
+                        ),
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-2xl font-bold text-purple-400" }, user.total_playtime || 0),
+                          React.createElement('div', { className: "text-xs text-gray-400" }, '總遊戲時間')
+                        )
+                      ),
+                      user.steam_id ? React.createElement('div', { className: "space-y-2" },
+                        React.createElement('div', { className: "flex items-center justify-center space-x-2 text-green-400" },
+                          React.createElement(Icons.Check),
+                          React.createElement('span', { className: "text-sm" }, 'Steam 已連結')
+                        ),
+                        user.steam_profile_url && React.createElement('a', {
+                          href: user.steam_profile_url,
+                          target: "_blank",
+                          rel: "noopener noreferrer",
+                          className: "w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
+                        },
+                          React.createElement(Icons.Steam),
+                          React.createElement('span', null, '查看Steam檔案'),
+                          React.createElement(Icons.ExternalLink)
+                        ),
+                        React.createElement('button', {
+                          onClick: () => setShowSteamForm(true),
+                          className: "w-full bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
+                        },
+                          React.createElement(Icons.RefreshCw),
+                          React.createElement('span', null, '重新同步')
+                        )
+                      ) : React.createElement('div', { className: "space-y-3" },
+                        React.createElement('div', { className: "bg-yellow-900 border border-yellow-700 rounded-lg p-3" },
+                          React.createElement('p', { className: "text-yellow-200 text-sm" }, '⚠️ 請連結Steam帳號以查看群組完整遊戲庫')
+                        ),
+                        React.createElement('button', {
+                          onClick: () => setShowSteamForm(true),
+                          className: "w-full bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors"
+                        },
+                          React.createElement(Icons.Steam),
+                          React.createElement('span', null, '連結Steam帳號')
+                        )
+                      )
                     )
                   ),
-                  user.steam_id ? React.createElement('div', { className: "space-y-2" },
-                    React.createElement('div', { className: "flex items-center justify-center space-x-2 text-green-400" },
-                      React.createElement(Icons.Check),
-                      React.createElement('span', { className: "text-sm" }, 'Steam 已連結')
-                    ),
-                    user.steam_profile_url && React.createElement('a', {
-                      href: user.steam_profile_url,
-                      target: "_blank",
-                      rel: "noopener noreferrer",
-                      className: "w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
-                    },
-                      React.createElement(Icons.Steam),
-                      React.createElement('span', null, '查看Steam檔案'),
-                      React.createElement(Icons.ExternalLink)
-                    ),
-                    React.createElement('button', {
-                      onClick: () => setShowSteamForm(true),
-                      className: "w-full bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
-                    },
-                      React.createElement(Icons.RefreshCw),
-                      React.createElement('span', null, '重新同步')
+                  React.createElement('div', { className: "lg:col-span-2 space-y-6" },
+                    React.createElement('div', { className: "bg-gray-800 rounded-lg p-6 border border-gray-700" },
+                      React.createElement('h4', { className: "text-lg font-semibold mb-4" }, '平台統計'),
+                      React.createElement('div', { className: "grid grid-cols-2 md:grid-cols-4 gap-4" },
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-xl font-bold text-blue-400" }, users.length),
+                          React.createElement('div', { className: "text-sm text-gray-400" }, hasFullAccess ? '總玩家數' : '共享帳號')
+                        ),
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-xl font-bold text-purple-400" }, games.length),
+                          React.createElement('div', { className: "text-sm text-gray-400" }, '遊戲總數')
+                        ),
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-xl font-bold text-green-400" },
+                            games.filter(g => g.owners && g.owners.length >= 2).length
+                          ),
+                          React.createElement('div', { className: "text-sm text-gray-400" }, '熱門遊戲')
+                        ),
+                        React.createElement('div', { className: "text-center" },
+                          React.createElement('div', { className: "text-xl font-bold text-yellow-400" },
+                            hasFullAccess && user ? games.filter(g => g.owners && g.owners.includes(user.username)).length : 0
+                          ),
+                          React.createElement('div', { className: "text-sm text-gray-400" }, '我的遊戲')
+                        )
+                      )
                     )
-                  ) : React.createElement('button', {
-                    onClick: () => setShowSteamForm(true),
-                    className: "w-full bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors"
-                  },
-                    React.createElement(Icons.Steam),
-                    React.createElement('span', null, '連結Steam帳號')
                   )
                 )
               )
@@ -819,7 +1009,8 @@
                     React.createElement('div', { className: "mt-2 text-xs text-gray-400" },
                       React.createElement('p', null, '支援格式：'),
                       React.createElement('p', null, '• https://steamcommunity.com/id/你的自訂ID/'),
-                      React.createElement('p', null, '• https://steamcommunity.com/profiles/數字ID/')
+                      React.createElement('p', null, '• https://steamcommunity.com/profiles/數字ID/'),
+                      React.createElement('p', { className: "text-yellow-400 mt-2" }, '⚠️ 請確保你的Steam個人檔案和遊戲詳情設為公開')
                     )
                   ),
                   syncStatus && React.createElement('div', { 
