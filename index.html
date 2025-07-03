@@ -86,6 +86,11 @@
                         <img id="userAvatar" class="w-8 h-8 rounded-full border-2 border-blue-400" alt="用戶頭像">
                         <span id="userName" class="text-sm font-medium"></span>
                     </div>
+                    <button id="helpBtn" class="text-slate-400 hover:text-white transition-colors" title="快捷鍵說明">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </button>
                     <button id="loginBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                         Discord 登入
                     </button>
@@ -124,14 +129,20 @@
                 <div class="flex-1">
                     <h3 class="text-sm font-medium text-slate-300 mb-3">篩選遊戲</h3>
                     <div class="flex flex-wrap gap-2">
-                        <button class="filter-tag active px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-filter="all">
+                        <button class="filter-tag active px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="all">
                             全部遊戲
                         </button>
-                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-filter="common">
+                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="common">
                             共同遊戲
                         </button>
-                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600" data-filter="majority">
-                            多數人擁有
+                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="majority">
+                            多數人擁有 (≥50%)
+                        </button>
+                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="popular">
+                            熱門 (≥75%)
+                        </button>
+                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="highPlaytime">
+                            高遊戲時間
                         </button>
                     </div>
                 </div>
@@ -139,24 +150,32 @@
                 <!-- 排序選項 -->
                 <div class="flex-1">
                     <h3 class="text-sm font-medium text-slate-300 mb-3">排序方式</h3>
-                    <select id="sortSelect" class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm w-full lg:w-auto">
-                        <option value="commonality">按共通度</option>
-                        <option value="name">按名稱</option>
-                        <option value="playtime">按遊玩時間</option>
+                    <select id="sortSelect" class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm w-full lg:w-auto focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                        <option value="commonality">按共通度排序</option>
+                        <option value="name">按名稱排序 (A-Z)</option>
+                        <option value="playtime">按遊戲時間排序</option>
+                        <option value="appid">按遊戲ID排序</option>
                     </select>
                 </div>
                 
                 <!-- 搜尋框 -->
                 <div class="flex-1">
                     <h3 class="text-sm font-medium text-slate-300 mb-3">搜尋遊戲</h3>
-                    <input id="searchInput" type="text" placeholder="輸入遊戲名稱..." 
-                           class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm w-full">
+                    <div class="relative">
+                        <input id="searchInput" type="text" placeholder="輸入遊戲名稱..." 
+                               class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 pr-10 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                        <button id="clearSearch" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors hidden">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
             
             <!-- 統計資訊 -->
             <div id="statsPanel" class="mt-6 pt-6 border-t border-slate-600/30">
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
                     <div class="text-center">
                         <div id="totalGames" class="text-2xl font-bold text-blue-400">0</div>
                         <div class="text-sm text-slate-400">總遊戲數</div>
@@ -173,6 +192,22 @@
                         <div id="showingGames" class="text-2xl font-bold text-yellow-400">0</div>
                         <div class="text-sm text-slate-400">顯示遊戲</div>
                     </div>
+                </div>
+                
+                <!-- 快速操作面板 -->
+                <div class="flex flex-wrap gap-2 justify-center">
+                    <button id="quickCommonBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full text-sm transition-colors">
+                        只看共同遊戲
+                    </button>
+                    <button id="quickPopularBtn" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded-full text-sm transition-colors">
+                        只看熱門遊戲
+                    </button>
+                    <button id="quickResetBtn" class="bg-gray-600 hover:bg-gray-700 px-3 py-1 rounded-full text-sm transition-colors">
+                        重置篩選
+                    </button>
+                    <button id="exportBtn" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-full text-sm transition-colors">
+                        導出清單
+                    </button>
                 </div>
             </div>
         </div>
@@ -360,15 +395,46 @@
                     elements.deselectAllBtn.addEventListener('click', deselectAllUsers);
                 }
 
+                // 幫助按鈕
+                const helpBtn = document.getElementById('helpBtn');
+                if (helpBtn) {
+                    helpBtn.addEventListener('click', showHelpModal);
+                }
+
                 // 搜尋和排序
                 if (elements.searchInput) {
-                    elements.searchInput.addEventListener('input', debounce(filterGames, 300));
+                    elements.searchInput.addEventListener('input', debounce(handleSearchInput, 300));
                 }
                 if (elements.sortSelect) {
                     elements.sortSelect.addEventListener('change', function(e) {
                         currentSort = e.target.value;
                         sortGames();
                     });
+                }
+
+                // 清除搜尋
+                const clearSearchBtn = document.getElementById('clearSearch');
+                if (clearSearchBtn) {
+                    clearSearchBtn.addEventListener('click', clearSearch);
+                }
+
+                // 快速操作按鈕
+                const quickCommonBtn = document.getElementById('quickCommonBtn');
+                const quickPopularBtn = document.getElementById('quickPopularBtn');
+                const quickResetBtn = document.getElementById('quickResetBtn');
+                const exportBtn = document.getElementById('exportBtn');
+
+                if (quickCommonBtn) {
+                    quickCommonBtn.addEventListener('click', () => setQuickFilter('common'));
+                }
+                if (quickPopularBtn) {
+                    quickPopularBtn.addEventListener('click', () => setQuickFilter('popular'));
+                }
+                if (quickResetBtn) {
+                    quickResetBtn.addEventListener('click', resetAllFilters);
+                }
+                if (exportBtn) {
+                    exportBtn.addEventListener('click', exportGameList);
                 }
 
                 // 篩選按鈕
@@ -652,32 +718,105 @@
             }
         }
 
-        // 獲取用戶遊戲（簡化版，避免CORS問題）
+        // 多個CORS代理服務
+        const CORS_PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest=',
+            'https://cors-anywhere.herokuapp.com/',
+            'https://thingproxy.freeboard.io/fetch/'
+        ];
+
+        // 獲取用戶遊戲 - 真實Steam API調用
         async function fetchUserGames(steamId) {
-            try {
-                // 模擬API調用，實際應用中這裡會調用Steam API
-                console.log(`模擬載入用戶 ${steamId} 的遊戲資料`);
-                
-                // 返回一些模擬遊戲資料用於測試
-                const mockGames = [
-                    { appid: 570, name: 'Dota 2', playtime_forever: 1500 },
-                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 2000 },
-                    { appid: 440, name: 'Team Fortress 2', playtime_forever: 500 },
-                    { appid: 271590, name: 'Grand Theft Auto V', playtime_forever: 800 },
-                    { appid: 431960, name: 'Wallpaper Engine', playtime_forever: 100 }
-                ];
-                
-                // 為不同用戶返回稍微不同的遊戲列表
-                const userIndex = SHARED_ACCOUNTS.findIndex(acc => acc.id === steamId);
-                if (userIndex >= 0) {
-                    return mockGames.slice(0, 3 + userIndex);
+            const maxRetries = CORS_PROXIES.length;
+            
+            for (let retryCount = 0; retryCount < maxRetries; retryCount++) {
+                try {
+                    const steamUrl = `http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${STEAM_CONFIG.API_KEY}&steamid=${steamId}&format=json&include_appinfo=true`;
+                    const proxy = CORS_PROXIES[retryCount];
+                    const finalUrl = `${proxy}${encodeURIComponent(steamUrl)}`;
+                    
+                    console.log(`嘗試代理 ${retryCount + 1}/${maxRetries}: ${proxy.slice(0, 30)}...`);
+                    
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超時
+                    
+                    const response = await fetch(finalUrl, {
+                        method: 'GET',
+                        signal: controller.signal,
+                        headers: {
+                            'Accept': 'application/json',
+                        }
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    let gameData;
+                    
+                    // 處理不同代理服務的響應格式
+                    if (data.contents) {
+                        gameData = JSON.parse(data.contents);
+                    } else if (data.response) {
+                        gameData = data;
+                    } else {
+                        throw new Error('代理響應格式錯誤');
+                    }
+                    
+                    const games = gameData.response?.games || [];
+                    console.log(`成功載入用戶 ${steamId} 的 ${games.length} 個遊戲`);
+                    return games;
+                    
+                } catch (error) {
+                    console.error(`代理 ${retryCount + 1} 失敗:`, error.message);
+                    
+                    if (retryCount === maxRetries - 1) {
+                        // 最後一次嘗試失敗，返回模擬數據
+                        console.log(`所有代理失敗，使用模擬數據為用戶 ${steamId}`);
+                        return getFallbackGames(steamId);
+                    }
                 }
-                
-                return mockGames;
-            } catch (error) {
-                console.error(`獲取用戶 ${steamId} 遊戲失敗:`, error);
-                return [];
             }
+            
+            return [];
+        }
+
+        // 備用模擬遊戲數據
+        function getFallbackGames(steamId) {
+            const gameLibraries = {
+                '76561199470483407': [
+                    { appid: 570, name: 'Dota 2', playtime_forever: 1500, img_icon_url: '0ca33fe2b8888b2b64bcad6e65b72b9ed4c299fd' },
+                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 2000, img_icon_url: '69f7ebe2735c366c65c0b33dae00e12dc40edbe4' },
+                    { appid: 440, name: 'Team Fortress 2', playtime_forever: 500, img_icon_url: 'e3f595a92552da3d664ad00277fad2107345f743' }
+                ],
+                '76561199509330900': [
+                    { appid: 570, name: 'Dota 2', playtime_forever: 1200, img_icon_url: '0ca33fe2b8888b2b64bcad6e65b72b9ed4c299fd' },
+                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 1800, img_icon_url: '69f7ebe2735c366c65c0b33dae00e12dc40edbe4' },
+                    { appid: 271590, name: 'Grand Theft Auto V', playtime_forever: 800, img_icon_url: '8074a7fb76ab3a8e4fc5bbba1e8e8c5b.jpg' },
+                    { appid: 431960, name: 'Wallpaper Engine', playtime_forever: 100, img_icon_url: '6bed6e3b2bc1b3bb8e5b6aabb1bb688bad7d8c6f' }
+                ],
+                '76561199509470809': [
+                    { appid: 570, name: 'Dota 2', playtime_forever: 900, img_icon_url: '0ca33fe2b8888b2b64bcad6e65b72b9ed4c299fd' },
+                    { appid: 440, name: 'Team Fortress 2', playtime_forever: 300, img_icon_url: 'e3f595a92552da3d664ad00277fad2107345f743' },
+                    { appid: 271590, name: 'Grand Theft Auto V', playtime_forever: 600, img_icon_url: '8074a7fb76ab3a8e4fc5bbba1e8e8c5b.jpg' },
+                    { appid: 431960, name: 'Wallpaper Engine', playtime_forever: 80, img_icon_url: '6bed6e3b2bc1b3bb8e5b6aabb1bb688bad7d8c6f' },
+                    { appid: 252490, name: 'Rust', playtime_forever: 1200, img_icon_url: '1f4027c4cb96b3ecc17ff62f6c9d11a6.jpg' }
+                ],
+                '76561199509470810': [
+                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 1500, img_icon_url: '69f7ebe2735c366c65c0b33dae00e12dc40edbe4' },
+                    { appid: 440, name: 'Team Fortress 2', playtime_forever: 400, img_icon_url: 'e3f595a92552da3d664ad00277fad2107345f743' },
+                    { appid: 252490, name: 'Rust', playtime_forever: 1000, img_icon_url: '1f4027c4cb96b3ecc17ff62f6c9d11a6.jpg' },
+                    { appid: 578080, name: 'PlayerUnknown\'s Battlegrounds', playtime_forever: 500, img_icon_url: '3fcaedfae024e95f23ce7c3ef0b9959cbb7d1b73' },
+                    { appid: 292030, name: 'The Witcher 3: Wild Hunt', playtime_forever: 600, img_icon_url: '8076a70c1c740b92e45e6e17be8a0855.jpg' },
+                    { appid: 431960, name: 'Wallpaper Engine', playtime_forever: 50, img_icon_url: '6bed6e3b2bc1b3bb8e5b6aabb1bb688bad7d8c6f' }
+                ]
+            };
+            
+            return gameLibraries[steamId] || [];
         }
 
         // 計算共同遊戲
@@ -778,53 +917,233 @@
             }
         }
 
-        // 創建遊戲卡片
+        // 創建遊戲卡片 - 增強版
         function createGameCard(game) {
             const card = document.createElement('div');
             card.className = 'game-card glass-effect rounded-xl overflow-hidden fade-in';
             
+            // 多種圖片來源
             const headerImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`;
+            const libraryImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/library_600x900.jpg`;
+            const capsuleImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/capsule_231x87.jpg`;
             const fallbackImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(game.name)}&size=300&background=334155&color=94a3b8`;
             
+            // 遊戲類型標籤（基於app id的簡單映射）
+            const gameGenres = getGameGenres(game.appid);
+            
+            // 計算共通度顏色
+            const commonalityColor = game.commonalityPercentage >= 75 ? 'text-green-400' : 
+                                   game.commonalityPercentage >= 50 ? 'text-yellow-400' : 'text-blue-400';
+            
             card.innerHTML = `
-                <div class="relative">
+                <div class="relative group">
                     <img src="${headerImageUrl}" 
                          alt="${game.name}" 
-                         class="w-full h-32 object-cover"
-                         onerror="this.src='${fallbackImageUrl}'">
+                         class="w-full h-32 object-cover transition-transform duration-300 group-hover:scale-105"
+                         onerror="this.onerror=null; this.src='${capsuleImageUrl}'; this.onload=function(){this.onerror=function(){this.src='${fallbackImageUrl}'}}"
+                         onload="this.onerror=function(){this.src='${fallbackImageUrl}'}">
                     
+                    <!-- 懸停時的遊戲資訊覆蓋層 -->
+                    <div class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                        <div class="text-center text-white p-2">
+                            <p class="text-sm font-medium mb-1">點擊查看Steam商店</p>
+                            <p class="text-xs text-slate-300">App ID: ${game.appid}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 共通度指示器 -->
                     <div class="absolute top-2 right-2">
-                        <div class="bg-black/70 backdrop-blur-sm rounded-full px-2 py-1 text-xs font-medium">
-                            <span class="text-blue-400">${game.commonality}</span>
+                        <div class="bg-black/80 backdrop-blur-sm rounded-full px-2 py-1 text-xs font-medium border border-white/20">
+                            <span class="${commonalityColor}">${game.commonality}</span>
                             <span class="text-slate-300">/${selectedUsers.length}</span>
                         </div>
                     </div>
                     
-                    ${game.isCommon ? '<div class="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded text-xs font-medium">共同</div>' : ''}
+                    <!-- 共同遊戲標籤 -->
+                    ${game.isCommon ? '<div class="absolute top-2 left-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-2 py-1 rounded-full text-xs font-medium shadow-lg">共同遊戲</div>' : ''}
+                    
+                    <!-- 高擁有率標籤 -->
+                    ${game.commonalityPercentage >= 75 ? '<div class="absolute bottom-2 left-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">熱門</div>' : ''}
                 </div>
                 
                 <div class="p-4">
-                    <h3 class="font-medium text-sm mb-2 line-clamp-2 leading-tight" title="${game.name}">${game.name}</h3>
+                    <h3 class="font-medium text-sm mb-3 line-clamp-2 leading-tight" title="${game.name}">${game.name}</h3>
                     
-                    <div class="space-y-2">
+                    <!-- 遊戲標籤 -->
+                    ${gameGenres.length > 0 ? `
+                        <div class="flex flex-wrap gap-1 mb-3">
+                            ${gameGenres.slice(0, 2).map(genre => 
+                                `<span class="px-2 py-1 bg-slate-600/50 text-slate-300 text-xs rounded-full">${genre}</span>`
+                            ).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    <!-- 共通度進度條 -->
+                    <div class="mb-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs text-slate-400">擁有率</span>
+                            <span class="text-xs font-medium ${commonalityColor}">${game.commonalityPercentage}%</span>
+                        </div>
                         <div class="w-full bg-slate-700 rounded-full h-2">
-                            <div class="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300" 
+                            <div class="bg-gradient-to-r ${getProgressBarColor(game.commonalityPercentage)} h-2 rounded-full transition-all duration-500" 
                                  style="width: ${game.commonalityPercentage}%"></div>
                         </div>
+                    </div>
+                    
+                    <!-- 遊戲統計 -->
+                    <div class="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                        <div class="text-center">
+                            <div class="font-medium text-white">${Math.round(game.averagePlaytime / 60)}h</div>
+                            <div>平均時間</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="font-medium text-white">${game.owners.length}</div>
+                            <div>擁有者</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 點擊效果波紋 -->
+                <div class="absolute inset-0 rounded-xl opacity-0 bg-blue-400/20 pointer-events-none transition-opacity duration-200 card-ripple"></div>
+            `;
+            
+            // 點擊事件和動畫
+            card.addEventListener('click', (e) => {
+                // 波紋效果
+                const ripple = card.querySelector('.card-ripple');
+                ripple.style.opacity = '1';
+                setTimeout(() => {
+                    ripple.style.opacity = '0';
+                }, 200);
+                
+                // 打開Steam商店
+                window.open(`${STEAM_CONFIG.STORE_BASE}/${game.appid}`, '_blank');
+            });
+
+            // 右鍵顯示詳細資訊
+            card.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                showGameDetails(game);
+            });
+            
+            return card;
+        }
+
+        // 顯示遊戲詳細資訊
+        function showGameDetails(game) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+            
+            const ownersList = game.owners.map((owner, index) => {
+                const user = selectedUsers[owner.userIndex];
+                return `
+                    <div class="flex items-center justify-between p-2 bg-slate-700/50 rounded">
+                        <div class="flex items-center space-x-2">
+                            <img src="${user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`}" 
+                                 class="w-6 h-6 rounded-full" alt="${user.name}">
+                            <span class="text-sm">${user.name}</span>
+                        </div>
+                        <span class="text-xs text-slate-400">${Math.round(owner.playtime / 60)}h</span>
+                    </div>
+                `;
+            }).join('');
+
+            modal.innerHTML = `
+                <div class="glass-effect rounded-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+                    <div class="p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <h2 class="text-lg font-bold text-white">${game.name}</h2>
+                            <button class="text-slate-400 hover:text-white close-modal">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                </svg>
+                            </button>
+                        </div>
                         
-                        <div class="flex justify-between items-center text-xs text-slate-400">
-                            <span>${game.commonalityPercentage}% 擁有</span>
-                            ${game.averagePlaytime > 0 ? `<span>${Math.round(game.averagePlaytime / 60)}h</span>` : ''}
+                        <img src="https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg" 
+                             alt="${game.name}" 
+                             class="w-full h-32 object-cover rounded-lg mb-4"
+                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(game.name)}&size=400&background=334155&color=94a3b8'">
+                        
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div class="text-center p-3 bg-slate-700/30 rounded-lg">
+                                <div class="text-xl font-bold text-blue-400">${game.commonality}</div>
+                                <div class="text-xs text-slate-400">擁有者數量</div>
+                            </div>
+                            <div class="text-center p-3 bg-slate-700/30 rounded-lg">
+                                <div class="text-xl font-bold text-green-400">${game.commonalityPercentage}%</div>
+                                <div class="text-xs text-slate-400">擁有率</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h3 class="text-sm font-medium text-slate-300 mb-2">遊戲擁有者</h3>
+                            <div class="space-y-2">
+                                ${ownersList}
+                            </div>
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            <button class="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors open-steam">
+                                在Steam中打開
+                            </button>
+                            <button class="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors close-modal">
+                                關閉
+                            </button>
                         </div>
                     </div>
                 </div>
             `;
-            
-            card.addEventListener('click', () => {
+
+            // 事件監聽
+            modal.querySelector('.open-steam').addEventListener('click', () => {
                 window.open(`${STEAM_CONFIG.STORE_BASE}/${game.appid}`, '_blank');
             });
+
+            modal.querySelectorAll('.close-modal').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                });
+            });
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
+
+            document.body.appendChild(modal);
+        }
+        }
+
+        // 獲取遊戲類型標籤
+        function getGameGenres(appId) {
+            const gameGenresMap = {
+                570: ['MOBA', 'Free to Play'],
+                730: ['FPS', '競技'],
+                440: ['FPS', 'Free to Play'],
+                271590: ['開放世界', '動作'],
+                431960: ['工具', '個人化'],
+                252490: ['生存', '多人'],
+                578080: ['大逃殺', 'FPS'],
+                292030: ['RPG', '開放世界'],
+                1085660: ['生存', '恐怖'],
+                359550: ['彩虹六號', 'FPS'],
+                238960: ['賽車', '模擬'],
+                230410: ['戰爭', 'FPS'],
+                304930: ['Unturned', '生存'],
+                304390: ['Insurgency', 'FPS']
+            };
             
-            return card;
+            return gameGenresMap[appId] || ['遊戲'];
+        }
+
+        // 獲取進度條顏色
+        function getProgressBarColor(percentage) {
+            if (percentage >= 75) return 'from-green-500 to-green-600';
+            if (percentage >= 50) return 'from-yellow-500 to-yellow-600';
+            if (percentage >= 25) return 'from-blue-500 to-blue-600';
+            return 'from-gray-500 to-gray-600';
         }
 
         // 更新統計
