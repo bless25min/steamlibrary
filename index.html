@@ -576,11 +576,40 @@
                 const { data: { session } } = await supabase.auth.getSession();
                 
                 if (session?.user) {
-                    const { data: userData } = await supabase
+                    console.log('用戶已登入:', session.user.id);
+                    
+                    // 嘗試獲取或建立用戶資料
+                    let { data: userData, error } = await supabase
                         .from('users')
                         .select('*')
                         .eq('discord_id', session.user.id)
                         .single();
+                    
+                    if (error && error.code === 'PGRST116') {
+                        // 用戶不存在，建立新用戶
+                        console.log('建立新用戶...');
+                        const { data: newUser, error: insertError } = await supabase
+                            .from('users')
+                            .insert({
+                                discord_id: session.user.id,
+                                username: session.user.user_metadata?.full_name || 
+                                         session.user.user_metadata?.name || 
+                                         'Discord User',
+                                avatar_url: session.user.user_metadata?.avatar_url
+                            })
+                            .select()
+                            .single();
+                        
+                        if (insertError) {
+                            console.error('建立用戶失敗:', insertError);
+                            throw insertError;
+                        }
+                        
+                        userData = newUser;
+                    } else if (error) {
+                        console.error('查詢用戶失敗:', error);
+                        throw error;
+                    }
                     
                     if (userData) {
                         currentUser = userData;
@@ -597,6 +626,7 @@
                 }
             } catch (error) {
                 console.error('檢查登入狀態失敗:', error);
+                alert('登入過程發生錯誤：' + error.message);
                 showWelcomeScreen();
             }
         }
