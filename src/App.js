@@ -106,7 +106,7 @@ function App() {
     alert('設定已儲存！');
   };
 
-  // 模擬Steam API同步
+  // 真實Steam API同步
   const syncSteamGames = async () => {
     if (!steamConfig.apiKey) {
       alert('請先設定Steam API密鑰');
@@ -124,110 +124,105 @@ function App() {
     setSyncStatus('同步中...');
 
     try {
-      // 模擬API延遲
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const allGames = [];
+      const gameMap = new Map();
+      let successCount = 0;
+      let errors = [];
 
-      // 模擬Steam遊戲資料
-      const mockGames = [
-        { 
-          id: 1, 
-          name: 'Valheim', 
-          accounts: [1, 2], 
-          playtime: 127, 
-          rating: 4.8, 
-          genre: '生存建造', 
-          price: 'NT$ 318',
-          tags: ['合作', '維京', '建造'],
-          img_icon_url: null
-        },
-        { 
-          id: 2, 
-          name: 'Deep Rock Galactic', 
-          accounts: [1, 3, 4], 
-          playtime: 89, 
-          rating: 4.9, 
-          genre: '合作射擊', 
-          price: 'NT$ 590',
-          tags: ['合作', '礦工', 'FPS'],
-          img_icon_url: null
-        },
-        { 
-          id: 3, 
-          name: 'Among Us', 
-          accounts: [1, 2, 3, 4], 
-          playtime: 45, 
-          rating: 4.3, 
-          genre: '社交推理', 
-          price: 'NT$ 102',
-          tags: ['多人', '推理', '派對'],
-          img_icon_url: null
-        },
-        { 
-          id: 4, 
-          name: 'Phasmophobia', 
-          accounts: [2, 3], 
-          playtime: 67, 
-          rating: 4.7, 
-          genre: '恐怖合作', 
-          price: 'NT$ 298',
-          tags: ['恐怖', '合作', '鬼魂'],
-          img_icon_url: null
-        },
-        { 
-          id: 5, 
-          name: 'Stardew Valley', 
-          accounts: [2, 4], 
-          playtime: 203, 
-          rating: 4.9, 
-          genre: '農場模擬', 
-          price: 'NT$ 398',
-          tags: ['休閒', '農場', '像素'],
-          img_icon_url: null
-        },
-        { 
-          id: 6, 
-          name: 'Portal 2', 
-          accounts: [3, 4], 
-          playtime: 34, 
-          rating: 4.9, 
-          genre: '解謎', 
-          price: 'NT$ 188',
-          tags: ['解謎', '合作', '經典'],
-          img_icon_url: null
-        },
-        { 
-          id: 7, 
-          name: 'Terraria', 
-          accounts: [1, 3], 
-          playtime: 156, 
-          rating: 4.7, 
-          genre: '沙盒冒險', 
-          price: 'NT$ 268',
-          tags: ['沙盒', '建造', '2D'],
-          img_icon_url: null
-        },
-        { 
-          id: 8, 
-          name: 'Overcooked! 2', 
-          accounts: [2], 
-          playtime: 28, 
-          rating: 4.6, 
-          genre: '派對合作', 
-          price: 'NT$ 675',
-          tags: ['派對', '料理', '混亂'],
-          img_icon_url: null
+      // 為每個設定的Steam ID獲取遊戲
+      for (let i = 0; i < steamConfig.steamIds.length; i++) {
+        const steamId = steamConfig.steamIds[i].trim();
+        if (!steamId) continue;
+
+        const accountIndex = i + 1;
+        setSyncStatus(`同步中... 正在處理${steamConfig.accountNames[i]}`);
+
+        try {
+          // 使用CORS代理來避免瀏覽器限制
+          const proxyUrl = 'https://api.allorigins.win/raw?url=';
+          const steamApiUrl = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${steamConfig.apiKey}&steamid=${steamId}&format=json&include_appinfo=true&include_played_free_games=true`;
+          
+          const response = await fetch(proxyUrl + encodeURIComponent(steamApiUrl));
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: 無法連接Steam API`);
+          }
+
+          const data = await response.json();
+          
+          if (!data.response) {
+            throw new Error('Steam API 回應格式錯誤');
+          }
+
+          if (!data.response.games) {
+            errors.push(`${steamConfig.accountNames[i]}: 沒有遊戲資料或帳號隱私設定不允許存取`);
+            continue;
+          }
+
+          // 處理遊戲資料
+          data.response.games.forEach(game => {
+            const gameId = game.appid;
+            const playtimeMinutes = game.playtime_forever || 0;
+            
+            if (gameMap.has(gameId)) {
+              // 遊戲已存在，添加帳號和累加遊戲時間
+              const existingGame = gameMap.get(gameId);
+              if (!existingGame.accounts.includes(accountIndex)) {
+                existingGame.accounts.push(accountIndex);
+              }
+              existingGame.totalPlaytime += playtimeMinutes;
+            } else {
+              // 新遊戲
+              gameMap.set(gameId, {
+                id: gameId,
+                name: game.name || '未知遊戲',
+                accounts: [accountIndex],
+                playtime: Math.floor(playtimeMinutes / 60), // 轉換為小時
+                totalPlaytime: playtimeMinutes,
+                rating: 0, // Steam API 不提供評分
+                genre: '待分類',
+                price: '待查詢',
+                tags: [],
+                img_icon_url: game.img_icon_url
+              });
+            }
+          });
+
+          successCount++;
+          
+        } catch (error) {
+          console.error(`帳號 ${accountIndex} 同步失敗:`, error);
+          errors.push(`${steamConfig.accountNames[i]}: ${error.message}`);
         }
-      ];
 
-      setGameLibrary(mockGames);
-      localStorage.setItem('gameLibrary', JSON.stringify(mockGames));
+        // 添加延遲以避免API限制
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // 轉換為陣列並排序
+      const gamesArray = Array.from(gameMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      
+      setGameLibrary(gamesArray);
+      localStorage.setItem('gameLibrary', JSON.stringify(gamesArray));
       
       const now = new Date();
       setLastSync(now);
       localStorage.setItem('lastSync', now.toISOString());
-      setSyncStatus('同步成功');
+      
+      // 設定狀態訊息
+      if (successCount === 0) {
+        setSyncStatus('同步失敗');
+        alert('所有帳號同步失敗:\n' + errors.join('\n'));
+      } else if (errors.length > 0) {
+        setSyncStatus(`部分成功 (${successCount}/${steamConfig.steamIds.filter(id => id.trim()).length})`);
+        alert(`同步完成！\n成功: ${successCount} 個帳號\n錯誤: ${errors.length} 個帳號\n\n錯誤詳情:\n${errors.join('\n')}`);
+      } else {
+        setSyncStatus('同步成功');
+        alert(`同步成功！獲得 ${gamesArray.length} 款遊戲`);
+      }
       
     } catch (error) {
+      console.error('同步過程發生錯誤:', error);
       setSyncStatus('同步失敗');
       alert('同步失敗: ' + error.message);
     } finally {
@@ -440,11 +435,25 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredGames.map(game => (
                 <div key={game.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-gray-600 transition-all transform hover:scale-105">
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-white line-clamp-2">{game.name}</h3>
-                    <div className="flex items-center space-x-1 text-yellow-400">
-                      <Icons.Star />
-                      <span className="text-sm">{game.rating}</span>
+                  <div className="flex items-start space-x-4 mb-3">
+                    {game.img_icon_url && (
+                      <img
+                        src={`https://media.steampowered.com/steamcommunity/public/images/apps/${game.id}/${game.img_icon_url}.jpg`}
+                        alt={game.name}
+                        className="w-12 h-12 rounded bg-gray-700"
+                        onError={(e) => e.target.style.display = 'none'}
+                      />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-white line-clamp-2">{game.name}</h3>
+                        {game.rating > 0 && (
+                          <div className="flex items-center space-x-1 text-yellow-400">
+                            <Icons.Star />
+                            <span className="text-sm">{game.rating}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -457,10 +466,12 @@ function App() {
                       <span className="text-gray-400">遊戲時間：</span>
                       <span className="text-gray-300">{game.playtime}小時</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">價格：</span>
-                      <span className="text-gray-300">{game.price}</span>
-                    </div>
+                    {game.price !== '待查詢' && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">價格：</span>
+                        <span className="text-gray-300">{game.price}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mb-4">
@@ -474,16 +485,18 @@ function App() {
                     </div>
                   </div>
 
-                  <div>
-                    <div className="text-sm text-gray-400 mb-2">標籤：</div>
-                    <div className="flex flex-wrap gap-1">
-                      {game.tags.map(tag => (
-                        <span key={tag} className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
-                          {tag}
-                        </span>
-                      ))}
+                  {game.tags && game.tags.length > 0 && (
+                    <div>
+                      <div className="text-sm text-gray-400 mb-2">標籤：</div>
+                      <div className="flex flex-wrap gap-1">
+                        {game.tags.map(tag => (
+                          <span key={tag} className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
