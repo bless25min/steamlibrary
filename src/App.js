@@ -1,5 +1,30 @@
 import React, { useState, useEffect } from 'react';
 
+// CSS 樣式
+const styles = `
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+`;
+
+// 注入樣式
+if (typeof document !== 'undefined' && !document.getElementById('custom-styles')) {
+  const styleSheet = document.createElement('style');
+  styleSheet.id = 'custom-styles';
+  styleSheet.textContent = styles;
+  document.head.appendChild(styleSheet);
+}
+
 // 圖示組件
 const Icons = {
   Search: () => (
@@ -70,12 +95,69 @@ function App() {
   // UI狀態
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAccount, setSelectedAccount] = useState('all');
+  const [sortBy, setSortBy] = useState('name'); // name, playtime, accounts
+  const [sortOrder, setSortOrder] = useState('asc'); // asc, desc
+  const [minAccounts, setMinAccounts] = useState(1); // 最少帳號數篩選
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState('未同步');
   const [lastSync, setLastSync] = useState(null);
   const [newWish, setNewWish] = useState({ name: '', reason: '' });
+  const [gameDetails, setGameDetails] = useState({}); // 存儲遊戲詳細資訊
 
-  // 載入保存的設定
+  // 獲取Steam遊戲詳細資訊
+  const fetchGameDetails = async (appId) => {
+    if (gameDetails[appId]) return gameDetails[appId]; // 已有快取
+
+    try {
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const storeApiUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=tchinese`;
+      
+      const response = await fetch(proxyUrl + encodeURIComponent(storeApiUrl));
+      if (!response.ok) throw new Error('無法獲取遊戲資訊');
+      
+      const data = await response.json();
+      const gameData = data[appId];
+      
+      if (gameData && gameData.success && gameData.data) {
+        const details = {
+          short_description: gameData.data.short_description || '暫無描述',
+          genres: gameData.data.genres || [],
+          developers: gameData.data.developers || [],
+          publishers: gameData.data.publishers || [],
+          release_date: gameData.data.release_date || {},
+          price_overview: gameData.data.price_overview || null,
+          categories: gameData.data.categories || [],
+          screenshots: gameData.data.screenshots || []
+        };
+        
+        setGameDetails(prev => ({ ...prev, [appId]: details }));
+        return details;
+      }
+    } catch (error) {
+      console.error(`獲取遊戲 ${appId} 詳細資訊失敗:`, error);
+    }
+    return null;
+  };
+
+  // 批量獲取遊戲詳細資訊
+  const batchFetchGameDetails = async (games) => {
+    setSyncStatus('獲取遊戲詳細資訊...');
+    const batchSize = 5; // 每批處理5個遊戲，避免API限制
+    
+    for (let i = 0; i < games.length; i += batchSize) {
+      const batch = games.slice(i, i + batchSize);
+      const promises = batch.map(game => fetchGameDetails(game.id));
+      
+      await Promise.allSettled(promises);
+      
+      // 添加延遲避免API限制
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setSyncStatus(`獲取遊戲資訊... ${Math.min(i + batchSize, games.length)}/${games.length}`);
+    }
+    
+    setSyncStatus('同步成功');
+  };
   useEffect(() => {
     const savedConfig = localStorage.getItem('steamConfig');
     if (savedConfig) {
@@ -219,6 +301,11 @@ function App() {
         setSyncStatus('同步成功');
         alert(`同步成功！獲得 ${gamesArray.length} 款遊戲`);
       }
+
+      // 異步獲取遊戲詳細資訊
+      if (gamesArray.length > 0) {
+        setTimeout(() => batchFetchGameDetails(gamesArray), 1000);
+      }
       
     } catch (error) {
       console.error('同步過程發生錯誤:', error);
@@ -269,13 +356,42 @@ function App() {
     localStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
   };
 
-  // 篩選遊戲
-  const filteredGames = gameLibrary.filter(game => {
-    const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         game.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesAccount = selectedAccount === 'all' || game.accounts.includes(parseInt(selectedAccount));
-    return matchesSearch && matchesAccount;
-  });
+  // 篩選和排序遊戲
+  const filteredAndSortedGames = () => {
+    let filtered = gameLibrary.filter(game => {
+      const matchesSearch = game.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           game.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesAccount = selectedAccount === 'all' || game.accounts.includes(parseInt(selectedAccount));
+      const matchesMinAccounts = game.accounts.length >= minAccounts;
+      
+      return matchesSearch && matchesAccount && matchesMinAccounts;
+    });
+
+    // 排序
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'playtime':
+          comparison = a.playtime - b.playtime;
+          break;
+        case 'accounts':
+          comparison = a.accounts.length - b.accounts.length;
+          break;
+        default:
+          comparison = 0;
+      }
+      
+      return sortOrder === 'desc' ? -comparison : comparison;
+    });
+
+    return filtered;
+  };
+
+  const filteredGames = filteredAndSortedGames();
 
   // 統計數據
   const totalGames = gameLibrary.length;
@@ -368,6 +484,9 @@ function App() {
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <h3 className="text-sm font-medium text-gray-400 mb-1">總遊戲數</h3>
                 <p className="text-2xl font-bold text-blue-400">{totalGames}</p>
+                {filteredGames.length !== totalGames && (
+                  <p className="text-xs text-gray-500">篩選後: {filteredGames.length}</p>
+                )}
               </div>
               {accountGameCounts.map(acc => (
                 <div key={acc.account} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
@@ -405,7 +524,7 @@ function App() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="relative">
                   <Icons.Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
@@ -427,77 +546,166 @@ function App() {
                     <option key={index + 1} value={index + 1}>{name}</option>
                   ))}
                 </select>
+
+                <select
+                  value={`${sortBy}-${sortOrder}`}
+                  onChange={(e) => {
+                    const [newSortBy, newSortOrder] = e.target.value.split('-');
+                    setSortBy(newSortBy);
+                    setSortOrder(newSortOrder);
+                  }}
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="name-asc">名稱 A-Z</option>
+                  <option value="name-desc">名稱 Z-A</option>
+                  <option value="playtime-desc">遊戲時間 高→低</option>
+                  <option value="playtime-asc">遊戲時間 低→高</option>
+                  <option value="accounts-desc">帳號數量 多→少</option>
+                  <option value="accounts-asc">帳號數量 少→多</option>
+                </select>
+
+                <select
+                  value={minAccounts}
+                  onChange={(e) => setMinAccounts(parseInt(e.target.value))}
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value={1}>至少1個帳號擁有</option>
+                  <option value={2}>至少2個帳號擁有</option>
+                  <option value={3}>至少3個帳號擁有</option>
+                  <option value={4}>4個帳號都擁有</option>
+                </select>
               </div>
             </div>
 
             {/* 遊戲列表 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredGames.map(game => (
-                <div key={game.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-gray-600 transition-all transform hover:scale-105">
-                  <div className="flex items-start space-x-4 mb-3">
-                    {game.img_icon_url && (
-                      <img
-                        src={`https://media.steampowered.com/steamcommunity/public/images/apps/${game.id}/${game.img_icon_url}.jpg`}
-                        alt={game.name}
-                        className="w-12 h-12 rounded bg-gray-700"
-                        onError={(e) => e.target.style.display = 'none'}
-                      />
-                    )}
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="text-lg font-semibold text-white line-clamp-2">{game.name}</h3>
-                        {game.rating > 0 && (
-                          <div className="flex items-center space-x-1 text-yellow-400">
-                            <Icons.Star />
-                            <span className="text-sm">{game.rating}</span>
-                          </div>
-                        )}
+              {filteredGames.map(game => {
+                const details = gameDetails[game.id];
+                return (
+                  <div key={game.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-gray-600 transition-all transform hover:scale-105">
+                    <div className="flex items-start space-x-4 mb-3">
+                      {game.img_icon_url && (
+                        <img
+                          src={`https://media.steampowered.com/steamcommunity/public/images/apps/${game.id}/${game.img_icon_url}.jpg`}
+                          alt={game.name}
+                          className="w-12 h-12 rounded bg-gray-700"
+                          onError={(e) => e.target.style.display = 'none'}
+                        />
+                      )}
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-2">
+                          <a
+                            href={`https://store.steampowered.com/app/${game.id}/`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-lg font-semibold text-blue-400 hover:text-blue-300 line-clamp-2 transition-colors"
+                          >
+                            {game.name}
+                            <Icons.ExternalLink className="inline ml-1 w-4 h-4" />
+                          </a>
+                          {game.rating > 0 && (
+                            <div className="flex items-center space-x-1 text-yellow-400">
+                              <Icons.Star />
+                              <span className="text-sm">{game.rating}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">類型：</span>
-                      <span className="text-gray-300">{game.genre}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">遊戲時間：</span>
-                      <span className="text-gray-300">{game.playtime}小時</span>
-                    </div>
-                    {game.price !== '待查詢' && (
+                    {/* 遊戲描述 */}
+                    {details && details.short_description && (
+                      <div className="mb-3">
+                        <p className="text-sm text-gray-300 line-clamp-3">{details.short_description}</p>
+                      </div>
+                    )}
+
+                    {/* 遊戲類型 */}
+                    {details && details.genres && details.genres.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-xs text-gray-400 mb-1">類型：</div>
+                        <div className="flex flex-wrap gap-1">
+                          {details.genres.slice(0, 3).map(genre => (
+                            <span key={genre.id} className="bg-purple-600 text-purple-100 px-2 py-1 rounded text-xs">
+                              {genre.description}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">價格：</span>
-                        <span className="text-gray-300">{game.price}</span>
+                        <span className="text-gray-400">遊戲時間：</span>
+                        <span className="text-gray-300">{game.playtime}小時</span>
                       </div>
-                    )}
-                  </div>
+                      
+                      {details && details.developers && details.developers.length > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">開發商：</span>
+                          <span className="text-gray-300 text-right">{details.developers[0]}</span>
+                        </div>
+                      )}
+                      
+                      {details && details.release_date && details.release_date.date && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">發行日期：</span>
+                          <span className="text-gray-300">{details.release_date.date}</span>
+                        </div>
+                      )}
 
-                  <div className="mb-4">
-                    <div className="text-sm text-gray-400 mb-2">可用帳號：</div>
-                    <div className="flex flex-wrap gap-1">
-                      {game.accounts.map(acc => (
-                        <span key={acc} className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs">
-                          {steamConfig.accountNames[acc - 1]}
-                        </span>
-                      ))}
+                      {details && details.price_overview && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">價格：</span>
+                          <span className="text-gray-300">{details.price_overview.final_formatted}</span>
+                        </div>
+                      )}
                     </div>
-                  </div>
 
-                  {game.tags && game.tags.length > 0 && (
-                    <div>
-                      <div className="text-sm text-gray-400 mb-2">標籤：</div>
+                    <div className="mb-4">
+                      <div className="text-sm text-gray-400 mb-2">
+                        可用帳號 ({game.accounts.length}/4)：
+                      </div>
                       <div className="flex flex-wrap gap-1">
-                        {game.tags.map(tag => (
-                          <span key={tag} className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
-                            {tag}
+                        {game.accounts.map(acc => (
+                          <span key={acc} className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs">
+                            {steamConfig.accountNames[acc - 1]}
                           </span>
                         ))}
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {/* 多人遊戲標籤 */}
+                    {details && details.categories && (
+                      <div className="mb-3">
+                        <div className="flex flex-wrap gap-1">
+                          {details.categories
+                            .filter(cat => cat.description.includes('Multi') || cat.description.includes('Co-op') || cat.description.includes('多人'))
+                            .slice(0, 2)
+                            .map(category => (
+                              <span key={category.id} className="bg-green-600 text-green-100 px-2 py-1 rounded text-xs">
+                                {category.description}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {game.tags && game.tags.length > 0 && (
+                      <div>
+                        <div className="text-sm text-gray-400 mb-2">標籤：</div>
+                        <div className="flex flex-wrap gap-1">
+                          {game.tags.map(tag => (
+                            <span key={tag} className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {gameLibrary.length === 0 && !loading && (
