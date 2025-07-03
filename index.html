@@ -297,6 +297,7 @@
           const loadUserData = async (authUser) => {
             if (!supabase) return;
             
+            setLoading(true);
             try {
               const { data: userData, error } = await supabase
                 .from('users')
@@ -332,12 +333,15 @@
               }
             } catch (error) {
               console.error('載入用戶數據失敗:', error);
+            } finally {
+              setLoading(false);
             }
           };
 
           const loadData = async () => {
             if (!supabase) return;
             
+            setLoading(true);
             try {
               // 載入用戶數據 - 根據登入狀態決定顯示範圍
               const { data: usersData } = await supabase
@@ -421,6 +425,8 @@
               }
             } catch (error) {
               console.error('載入數據失敗:', error);
+            } finally {
+              setLoading(false);
             }
           };
 
