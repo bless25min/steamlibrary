@@ -1050,7 +1050,10 @@
                        game.name.trim().length > 0;
             }).map(game => ({
                 ...game,
-                name: game.name.trim(),
+                name: game.name.trim()
+                    .replace(/[\r\n\t]/g, ' ') // 移除換行符和製表符
+                    .replace(/\s+/g, ' ') // 將多個空格合併為一個
+                    .replace(/[^\x20-\x7E\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]/g, ''), // 只保留ASCII可打印字符和中日韓字符
                 playtime_forever: game.playtime_forever || 0,
                 img_icon_url: game.img_icon_url || ''
             }));
@@ -1061,17 +1064,17 @@
             const gameLibraries = {
                 '76561199470483407': [
                     { appid: 570, name: 'Dota 2', playtime_forever: 1500 },
-                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 2000 },
+                    { appid: 730, name: 'Counter-Strike Global Offensive', playtime_forever: 2000 },
                     { appid: 440, name: 'Team Fortress 2', playtime_forever: 500 },
                     { appid: 271590, name: 'Grand Theft Auto V', playtime_forever: 1200 },
                     { appid: 252490, name: 'Rust', playtime_forever: 800 }
                 ],
                 '76561199509330900': [
                     { appid: 570, name: 'Dota 2', playtime_forever: 1200 },
-                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 1800 },
+                    { appid: 730, name: 'Counter-Strike Global Offensive', playtime_forever: 1800 },
                     { appid: 271590, name: 'Grand Theft Auto V', playtime_forever: 800 },
                     { appid: 431960, name: 'Wallpaper Engine', playtime_forever: 100 },
-                    { appid: 292030, name: 'The Witcher 3: Wild Hunt', playtime_forever: 400 }
+                    { appid: 292030, name: 'The Witcher 3 Wild Hunt', playtime_forever: 400 }
                 ],
                 '76561199509470809': [
                     { appid: 570, name: 'Dota 2', playtime_forever: 900 },
@@ -1081,18 +1084,18 @@
                     { appid: 252490, name: 'Rust', playtime_forever: 1200 }
                 ],
                 '76561199509470810': [
-                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 1500 },
+                    { appid: 730, name: 'Counter-Strike Global Offensive', playtime_forever: 1500 },
                     { appid: 440, name: 'Team Fortress 2', playtime_forever: 400 },
                     { appid: 252490, name: 'Rust', playtime_forever: 1000 },
-                    { appid: 578080, name: 'PUBG: BATTLEGROUNDS', playtime_forever: 500 },
-                    { appid: 292030, name: 'The Witcher 3: Wild Hunt', playtime_forever: 600 },
+                    { appid: 578080, name: 'PUBG BATTLEGROUNDS', playtime_forever: 500 },
+                    { appid: 292030, name: 'The Witcher 3 Wild Hunt', playtime_forever: 600 },
                     { appid: 431960, name: 'Wallpaper Engine', playtime_forever: 50 }
                 ]
             };
             
             if (!gameLibraries[steamId]) {
                 return [
-                    { appid: 730, name: 'Counter-Strike: Global Offensive', playtime_forever: 100 },
+                    { appid: 730, name: 'Counter-Strike Global Offensive', playtime_forever: 100 },
                     { appid: 570, name: 'Dota 2', playtime_forever: 50 }
                 ];
             }
@@ -1268,6 +1271,11 @@
                         try {
                             const game = filteredGames[i];
                             if (game && game.name && game.appid) {
+                                // 調試用：記錄可能有問題的遊戲名稱
+                                if (game.name.includes("'") || game.name.includes('"') || game.name.includes('\\') || game.name.includes(':')) {
+                                    console.log('特殊字符遊戲名稱:', game.name, 'App ID:', game.appid);
+                                }
+                                
                                 const gameCard = createGameCard(game);
                                 if (gameCard) {
                                     fragment.appendChild(gameCard);
@@ -1304,17 +1312,28 @@
             const commonalityColor = game.commonalityPercentage >= 75 ? 'text-green-400' : 
                                    game.commonalityPercentage >= 50 ? 'text-yellow-400' : 'text-blue-400';
             
-            // 使用 data attributes 而不是直接在 onclick 中嵌入字符串
-            card.setAttribute('data-game-appid', game.appid);
-            card.setAttribute('data-game-name', game.name);
+            // 創建圖片元素以避免內嵌事件處理器的問題
+            const img = document.createElement('img');
+            img.src = headerImageUrl;
+            img.alt = game.name;
+            img.className = 'w-full h-32 object-cover transition-transform duration-300 group-hover:scale-105';
             
-            card.innerHTML = `
+            // 設置錯誤處理
+            let errorCount = 0;
+            img.onerror = function() {
+                errorCount++;
+                if (errorCount === 1) {
+                    this.src = capsuleImageUrl;
+                } else if (errorCount === 2) {
+                    this.src = fallbackImageUrl;
+                }
+            };
+            
+            // 創建卡片內容
+            const cardContent = document.createElement('div');
+            cardContent.innerHTML = `
                 <div class="relative group">
-                    <img src="${headerImageUrl}" 
-                         alt="${escapeHtml(game.name)}" 
-                         class="w-full h-32 object-cover transition-transform duration-300 group-hover:scale-105"
-                         onerror="this.onerror=null; this.src='${capsuleImageUrl}'; this.onload = function() { this.onerror = function() { this.src='${fallbackImageUrl}'; } }"
-                         onload="this.onerror = function() { this.src='${fallbackImageUrl}'; }">
+                    <div class="img-container"></div>
                     
                     <div class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
                         <div class="text-center text-white p-2">
@@ -1344,14 +1363,12 @@
                 </div>
                 
                 <div class="p-4">
-                    <h3 class="font-medium text-sm mb-3 line-clamp-2 leading-tight" title="${escapeHtml(game.name)}">
-                        ${escapeHtml(game.name)}
-                    </h3>
+                    <h3 class="font-medium text-sm mb-3 line-clamp-2 leading-tight game-title"></h3>
                     
                     ${gameGenres.length > 0 ? `
                         <div class="flex flex-wrap gap-1 mb-3">
                             ${gameGenres.slice(0, 2).map(genre => 
-                                `<span class="px-2 py-1 bg-slate-600/50 text-slate-300 text-xs rounded-full">${genre}</span>`
+                                `<span class="px-2 py-1 bg-slate-600/50 text-slate-300 text-xs rounded-full">${escapeHtml(genre)}</span>`
                             ).join('')}
                         </div>
                     ` : ''}
@@ -1382,6 +1399,17 @@
                 <div class="absolute inset-0 rounded-xl opacity-0 bg-blue-400/20 pointer-events-none transition-opacity duration-200 card-ripple"></div>
             `;
             
+            card.appendChild(cardContent);
+            
+            // 將圖片插入到容器中
+            const imgContainer = card.querySelector('.img-container');
+            imgContainer.appendChild(img);
+            
+            // 設置遊戲標題（使用 textContent 而不是 innerHTML）
+            const titleElement = card.querySelector('.game-title');
+            titleElement.textContent = game.name;
+            titleElement.title = game.name;
+            
             // 使用獨立的事件處理器
             card.addEventListener('click', (e) => {
                 const rippleElement = card.querySelector('.card-ripple');
@@ -1392,8 +1420,7 @@
                     }, 200);
                 }
                 
-                const appid = card.getAttribute('data-game-appid');
-                window.open(`${STEAM_CONFIG.STORE_BASE}/${appid}`, '_blank');
+                window.open(`${STEAM_CONFIG.STORE_BASE}/${game.appid}`, '_blank');
             });
 
             card.addEventListener('contextmenu', (e) => {
@@ -1406,13 +1433,23 @@
 
         // 安全的HTML轉義函數
         function escapeHtml(unsafe) {
-            if (typeof unsafe !== 'string') return unsafe;
+            if (typeof unsafe !== 'string') return String(unsafe || '');
             return unsafe
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
                 .replace(/>/g, "&gt;")
                 .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
+                .replace(/'/g, "&#039;")
+                .replace(/\\/g, "&#92;")
+                .replace(/\n/g, " ")
+                .replace(/\r/g, " ")
+                .replace(/\t/g, " ");
+        }
+        
+        // 用於URL參數的編碼函數
+        function encodeAttribute(str) {
+            if (typeof str !== 'string') return String(str || '');
+            return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // 獲取遊戲類型標籤
@@ -1428,7 +1465,9 @@
                 292030: ['RPG', '開放世界']
             };
             
-            return gameGenresMap[appId] || ['遊戲'];
+            const genres = gameGenresMap[appId] || ['遊戲'];
+            // 確保類型標籤也被轉義
+            return genres.map(genre => escapeHtml(genre));
         }
 
         // 獲取進度條顏色
