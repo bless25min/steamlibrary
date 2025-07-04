@@ -139,8 +139,23 @@
         <!-- 用戶選擇面板 -->
         <div id="userPanel" class="glass-effect rounded-xl p-6 mb-8">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <h2 class="text-lg font-semibold mb-4 sm:mb-0">選擇用戶來比較遊戲庫</h2>
-                <div class="flex space-x-2">
+                <div>
+                    <h2 class="text-lg font-semibold mb-2">Discord群組成員 & 共享帳號</h2>
+                    <p class="text-sm text-slate-400">選擇用戶來比較遊戲庫並找出共同遊戲</p>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-4 sm:mt-0">
+                    <button id="manageSteamBtn" class="hidden bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors">
+                        <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+                        </svg>
+                        管理Steam連結
+                    </button>
+                    <button id="testSteamBtn" class="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-sm transition-colors">
+                        <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        測試Steam URL
+                    </button>
                     <button id="selectAllBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors">
                         全選
                     </button>
@@ -312,11 +327,115 @@
             { id: '76561199509470809', name: '共享帳號 #3', isShared: true, gameCount: 0 },
             { id: '76561199509517864', name: '共享帳號 #4', isShared: true, gameCount: 0 }
         ];
+
+        // Steam URL 解析正則表達式
+        const STEAM_URL_PATTERNS = [
+            /steamcommunity\.com\/profiles\/([0-9]{17})/,  // 直接 Steam ID
+            /steamcommunity\.com\/id\/([^\/]+)/,           // 自定義 URL
+        ];
         
         // 驗證 Steam ID
         function validateSteamId(steamId) {
             const steamIdPattern = /^[0-9]{17}$/;
             return steamIdPattern.test(steamId);
+        }
+
+        // 解析Steam URL並提取Steam ID
+        async function parseSteamUrl(url) {
+            try {
+                // 清理URL
+                let cleanUrl = url.trim();
+                if (!cleanUrl.startsWith('http')) {
+                    cleanUrl = 'https://' + cleanUrl;
+                }
+
+                // 嘗試匹配直接的Steam ID
+                const directMatch = cleanUrl.match(STEAM_URL_PATTERNS[0]);
+                if (directMatch) {
+                    return directMatch[1];
+                }
+
+                // 嘗試匹配自定義URL
+                const customMatch = cleanUrl.match(STEAM_URL_PATTERNS[1]);
+                if (customMatch) {
+                    const customId = customMatch[1];
+                    return await resolveCustomSteamId(customId);
+                }
+
+                throw new Error('無效的Steam URL格式');
+            } catch (error) {
+                throw new AppError(`無法解析Steam URL: ${error.message}`, 'steam-url');
+            }
+        }
+
+        // 解析自定義Steam ID
+        async function resolveCustomSteamId(customId) {
+            const errors = [];
+            
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                const proxy = CORS_PROXIES[i];
+                try {
+                    const steamUrl = `${STEAM_CONFIG.API_BASE}/ISteamUser/ResolveVanityURL/v0001/?key=${STEAM_CONFIG.API_KEY}&vanityurl=${encodeURIComponent(customId)}&url_type=1`;
+                    const finalUrl = `${proxy.url}${encodeURIComponent(steamUrl)}`;
+                    
+                    console.log(`嘗試解析自定義Steam ID: ${customId} 使用代理: ${proxy.name}`);
+                    
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), proxy.timeout);
+                    
+                    const response = await fetch(finalUrl, {
+                        method: 'GET',
+                        signal: controller.signal,
+                        headers: { 
+                            'Accept': 'application/json',
+                            'User-Agent': 'Steam Game Finder/1.0'
+                        }
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const responseText = await response.text();
+                    let data;
+                    
+                    try {
+                        const jsonData = JSON.parse(responseText);
+                        data = jsonData.contents ? JSON.parse(jsonData.contents) : jsonData;
+                    } catch (parseError) {
+                        console.error('解析響應失敗:', responseText.substring(0, 200));
+                        throw new Error('解析響應失敗');
+                    }
+                    
+                    console.log('Steam API ResolveVanityURL 響應:', data);
+                    
+                    if (data.response) {
+                        if (data.response.success === 1 && data.response.steamid) {
+                            console.log(`成功解析自定義ID ${customId} -> Steam ID: ${data.response.steamid}`);
+                            return data.response.steamid;
+                        } else if (data.response.success === 42) {
+                            throw new Error(`找不到自定義URL: ${customId}`);
+                        } else {
+                            throw new Error(`Steam API錯誤 (code: ${data.response.success}): ${data.response.message || '未知錯誤'}`);
+                        }
+                    } else {
+                        throw new Error('Steam API響應格式錯誤');
+                    }
+                    
+                } catch (error) {
+                    const errorMsg = `代理 ${proxy.name}: ${error.message}`;
+                    console.error(errorMsg);
+                    errors.push(errorMsg);
+                    
+                    if (i < CORS_PROXIES.length - 1) {
+                        console.log('嘗試下一個代理...');
+                    }
+                }
+            }
+            
+            throw new Error(`無法解析自定義Steam ID "${customId}": ${errors.join(', ')}`);
         }
 
         // 改進的CORS代理服務
@@ -416,7 +535,7 @@
                 'userList', 'gamesGrid', 'loadingState', 'emptyState',
                 'searchInput', 'sortSelect', 'selectAllBtn', 'deselectAllBtn',
                 'totalGames', 'commonGames', 'selectedUsers', 'showingGames',
-                'dbStatus', 'apiStatus', 'retryFailedBtn'
+                'dbStatus', 'apiStatus', 'retryFailedBtn', 'manageSteamBtn', 'testSteamBtn'
             ];
 
             elements = {};
@@ -544,6 +663,18 @@
                     elements.retryFailedBtn.addEventListener('click', retryFailedUsers);
                 }
 
+                // 管理Steam連結按鈕
+                const manageSteamBtn = document.getElementById('manageSteamBtn');
+                if (manageSteamBtn) {
+                    manageSteamBtn.addEventListener('click', showSteamLinkModal);
+                }
+                
+                // 測試Steam URL按鈕（開發用）
+                const testSteamBtn = document.getElementById('testSteamBtn');
+                if (testSteamBtn) {
+                    testSteamBtn.addEventListener('click', showSteamTestModal);
+                }
+
                 // 幫助按鈕
                 const helpBtn = document.getElementById('helpBtn');
                 if (helpBtn) {
@@ -612,7 +743,7 @@
                     authInitialized = true;
                     let lastEvent = null;
                     
-                    supabase.auth.onAuthStateChange((event, session) => {
+                    supabase.auth.onAuthStateChange(async (event, session) => {
                         if (event === lastEvent && event === 'SIGNED_IN') {
                             return;
                         }
@@ -623,8 +754,16 @@
                         if (event === 'SIGNED_IN' && session) {
                             currentUser = session.user;
                             updateAuthInterface(true);
-                            loadUsers();
-                            showNotification('登入成功！', 'success');
+                            
+                            // 檢查用戶是否已設置Steam ID
+                            const hasExistingSteamId = await checkUserSteamId(currentUser.id);
+                            if (!hasExistingSteamId) {
+                                // 顯示Steam連結輸入彈窗
+                                showSteamLinkModal();
+                            } else {
+                                loadUsers();
+                                showNotification('歡迎回來！', 'success');
+                            }
                         } else if (event === 'SIGNED_OUT') {
                             currentUser = null;
                             updateAuthInterface(false);
@@ -642,1396 +781,351 @@
             }
         }
 
-        // 認證檢查
-        async function checkAuth() {
+        // 檢查用戶是否已設置Steam ID
+        async function checkUserSteamId(discordUserId) {
             try {
-                if (!supabase) return;
+                if (!supabase) return false;
                 
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session) {
-                    currentUser = session.user;
-                    updateAuthInterface(true);
-                    console.log('用戶已登入:', currentUser.user_metadata?.full_name);
-                }
-            } catch (error) {
-                ErrorLogger.log(new AppError('檢查認證狀態失敗', 'auth', error));
-            }
-        }
-
-        // 登入處理
-        async function handleLogin() {
-            try {
-                if (!supabase) {
-                    throw new AppError('認證服務未準備就緒', 'auth');
-                }
-
-                const { error } = await supabase.auth.signInWithOAuth({
-                    provider: 'discord',
-                    options: {
-                        redirectTo: window.location.href
-                    }
-                });
-
-                if (error) {
-                    throw new AppError('登入失敗', 'auth', error);
-                }
-            } catch (error) {
-                ErrorLogger.log(error);
-                showNotification(error.message, 'error');
-            }
-        }
-
-        // 登出處理
-        async function handleLogout() {
-            try {
-                if (!supabase) return;
-
-                const { error } = await supabase.auth.signOut();
-                if (error) {
-                    throw new AppError('登出失敗', 'auth', error);
-                } else {
-                    showNotification('已成功登出', 'success');
-                }
-            } catch (error) {
-                ErrorLogger.log(error);
-            }
-        }
-
-        // 更新認證界面
-        function updateAuthInterface(isLoggedIn) {
-            try {
-                if (isLoggedIn && currentUser) {
-                    if (elements.loginBtn) elements.loginBtn.classList.add('hidden');
-                    if (elements.logoutBtn) elements.logoutBtn.classList.remove('hidden');
-                    if (elements.userInfo) {
-                        elements.userInfo.classList.remove('hidden');
-                        elements.userInfo.classList.add('flex');
-                    }
-                    if (elements.userAvatar) {
-                        elements.userAvatar.src = currentUser.user_metadata?.avatar_url || 'https://ui-avatars.com/api/?name=User';
-                    }
-                    if (elements.userName) {
-                        elements.userName.textContent = currentUser.user_metadata?.full_name || currentUser.email || 'User';
-                    }
-                } else {
-                    if (elements.loginBtn) elements.loginBtn.classList.remove('hidden');
-                    if (elements.logoutBtn) elements.logoutBtn.classList.add('hidden');
-                    if (elements.userInfo) {
-                        elements.userInfo.classList.add('hidden');
-                        elements.userInfo.classList.remove('flex');
-                    }
-                }
-            } catch (error) {
-                ErrorLogger.log(new AppError('更新認證界面失敗', 'ui', error));
-            }
-        }
-
-        // 載入用戶
-        async function loadUsers() {
-            try {
-                SHARED_ACCOUNTS.forEach(account => {
-                    account.gameCount = 0;
-                    account.hasError = false;
-                });
+                const { data: user, error } = await supabase
+                    .from('users')
+                    .select('steam_id')
+                    .eq('discord_id', discordUserId)
+                    .maybeSingle();
                 
-                allUsers = [...SHARED_ACCOUNTS];
+                if (error && error.code !== '42501') {
+                    console.error('檢查用戶Steam ID失敗:', error);
+                    return false;
+                }
                 
-                if (currentUser && supabase) {
-                    try {
-                        const { data: users, error } = await supabase
-                            .from('users')
-                            .select('*')
-                            .neq('is_shared', true);
+                return user && user.steam_id && user.steam_id.trim() !== '';
+            } catch (error) {
+                console.error('檢查用戶Steam ID異常:', error);
+                return false;
+            }
+        }
+
+        // 顯示Steam連結輸入彈窗
+        function showSteamLinkModal() {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+            modal.id = 'steamLinkModal';
+            
+            modal.innerHTML = `
+                <div class="glass-effect rounded-xl max-w-md w-full">
+                    <div class="p-6">
+                        <div class="text-center mb-6">
+                            <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                                <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 0C8.74 0 5.73 1.22 3.46 3.25L7.5 7.29c.41-.41.97-.67 1.58-.67 1.24 0 2.25 1.01 2.25 2.25 0 .61-.26 1.17-.67 1.58l4.04 4.04C16.78 12.27 18 9.26 18 6c0-3.31-2.69-6-6-6z"/>
+                                    <path d="M6 12c0 3.31 2.69 6 6 6s6-2.69 6-6c0-.34-.03-.68-.08-1.01L14.71 7.78C14.42 7.92 14.1 8 13.75 8c-1.24 0-2.25-1.01-2.25-2.25 0-.35.08-.67.22-.96L7.5 0.57C6.61 0.2 5.64 0 4.64 0 2.08 0 0 2.08 0 4.64c0 1 .2 1.97.57 2.86L4.79 11.72c.29-.14.61-.22.96-.22 1.24 0 2.25 1.01 2.25 2.25z"/>
+                                </svg>
+                            </div>
+                            <h2 class="text-xl font-bold text-white mb-2">連結你的Steam帳號</h2>
+                            <p class="text-slate-400 text-sm">請提供你的Steam個人資料頁面連結，這樣我們就能幫你找到與Discord群組成員的共同遊戲！</p>
+                        </div>
                         
-                        if (error) {
-                            // 處理RLS錯誤但不影響功能
-                            if (error.code === '42501' || error.message.includes('RLS')) {
-                                console.warn('RLS政策限制，使用共享帳號模式');
-                                updateSystemStatus('database', 'warning');
-                            } else {
-                                throw error;
-                            }
-                        } else if (users) {
-                            const mappedUsers = users.map(user => ({
-                                id: user.steam_id,
-                                name: user.username,
-                                avatar: user.avatar_url,
-                                gameCount: user.game_count || 0,
-                                isShared: false,
-                                hasError: false
-                            }));
-                            allUsers = [...allUsers, ...mappedUsers];
-                        }
-                    } catch (dbError) {
-                        ErrorLogger.log(new AppError('載入資料庫用戶失敗', 'database', dbError));
-                        console.warn('無法載入資料庫用戶，僅使用共享帳號');
-                    }
-                }
-                
-                updateUserInterface();
-                console.log('用戶載入完成，總用戶數:', allUsers.length);
-            } catch (error) {
-                ErrorLogger.log(new AppError('載入用戶失敗', 'general', error));
-                showNotification('載入用戶資料失敗', 'error');
-            }
-        }
-
-        // 更新用戶界面
-        function updateUserInterface() {
-            try {
-                if (!elements.userList) return;
-                
-                elements.userList.innerHTML = '';
-                
-                allUsers.forEach(user => {
-                    const userCard = createUserCard(user);
-                    elements.userList.appendChild(userCard);
-                });
-                
-                // 更新重試按鈕顯示
-                if (elements.retryFailedBtn) {
-                    if (failedUsers.length > 0) {
-                        elements.retryFailedBtn.classList.remove('hidden');
-                        elements.retryFailedBtn.textContent = `重試失敗用戶 (${failedUsers.length})`;
-                    } else {
-                        elements.retryFailedBtn.classList.add('hidden');
-                    }
-                }
-                
-                updateStats();
-            } catch (error) {
-                ErrorLogger.log(new AppError('更新用戶界面失敗', 'ui', error));
-            }
-        }
-
-        // 創建用戶卡片
-        function createUserCard(user) {
-            const isSelected = selectedUsers.some(u => u.id === user.id);
-            const hasFailed = failedUsers.some(u => u.id === user.id);
-            
-            const card = document.createElement('div');
-            card.className = `user-card p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                isSelected 
-                    ? 'bg-blue-600/20 border-blue-400' 
-                    : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-            } ${hasFailed ? 'error-indicator' : ''}`;
-            
-            const avatarUrl = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=475569&color=ffffff`;
-            
-            card.innerHTML = `
-                <div class="flex flex-col items-center space-y-2">
-                    <div class="relative">
-                        <img src="${avatarUrl}" 
-                             class="user-avatar w-12 h-12 rounded-full border-2 ${isSelected ? 'border-blue-400' : 'border-slate-500'}" 
-                             alt="${escapeHtml(user.name)}"
-                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=475569&color=ffffff'">
-                        ${isSelected ? `
-                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                                <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
-                                </svg>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Steam個人資料連結</label>
+                                <input type="url" id="steamUrlInput" 
+                                       placeholder="https://steamcommunity.com/profiles/... 或 https://steamcommunity.com/id/..." 
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                                <div class="mt-2 text-xs text-slate-400">
+                                    支援格式：
+                                    <br>• https://steamcommunity.com/profiles/76561198123456789
+                                    <br>• https://steamcommunity.com/id/your-custom-name
+                                </div>
                             </div>
-                        ` : ''}
-                        ${hasFailed ? `
-                            <div class="absolute -top-1 -left-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                                <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                                    <path fill-rule="evenodd" d="M10 2C5.58 2 2 5.58 2 10s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                                </svg>
+                            
+                            <div id="steamUrlError" class="hidden bg-red-600/20 border border-red-500/30 rounded-lg p-3">
+                                <div class="flex items-center space-x-2">
+                                    <svg class="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span class="text-red-400 text-sm" id="steamUrlErrorText"></span>
+                                </div>
                             </div>
-                        ` : ''}
-                    </div>
-                    <div class="text-center">
-                        <div class="text-sm font-medium truncate max-w-20" title="${escapeHtml(user.name)}">${escapeHtml(user.name)}</div>
-                        ${user.gameCount > 0 ? `<div class="text-xs text-slate-400">${user.gameCount} 遊戲</div>` : ''}
-                        ${user.isShared ? '<div class="text-xs text-blue-400">共享</div>' : ''}
-                        ${hasFailed ? '<div class="text-xs text-red-400">載入失敗</div>' : ''}
+                            
+                            <div id="steamUrlSuccess" class="hidden bg-green-600/20 border border-green-500/30 rounded-lg p-3">
+                                <div class="flex items-center space-x-2">
+                                    <svg class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span class="text-green-400 text-sm" id="steamUrlSuccessText"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex space-x-3 mt-6">
+                            <button id="confirmSteamLink" class="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span class="btn-text">確認連結</span>
+                                <span class="btn-loading hidden">
+                                    <svg class="animate-spin w-4 h-4 mx-auto" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                            </button>
+                            <button id="skipSteamLink" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                                稍後設置
+                            </button>
+                        </div>
+                        
+                        <div class="mt-4 p-3 bg-slate-700/30 rounded-lg">
+                            <div class="flex items-start space-x-2">
+                                <svg class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                </svg>
+                                <div class="text-xs text-slate-400">
+                                    <div class="font-medium mb-1">為什麼需要Steam連結？</div>
+                                    <div>我們需要訪問你的Steam遊戲庫來找出群組中所有人都擁有的遊戲。請確保你的Steam個人資料和遊戲詳情設為「公開」。</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
             
-            card.addEventListener('click', () => toggleUser(user));
+            document.body.appendChild(modal);
             
-            return card;
-        }
-
-        // 切換用戶選擇
-        function toggleUser(user) {
-            const index = selectedUsers.findIndex(u => u.id === user.id);
-            if (index === -1) {
-                selectedUsers.push(user);
-            } else {
-                selectedUsers.splice(index, 1);
-            }
+            const urlInput = modal.querySelector('#steamUrlInput');
+            const confirmBtn = modal.querySelector('#confirmSteamLink');
+            const skipBtn = modal.querySelector('#skipSteamLink');
+            const errorDiv = modal.querySelector('#steamUrlError');
+            const errorText = modal.querySelector('#steamUrlErrorText');
+            const successDiv = modal.querySelector('#steamUrlSuccess');
+            const successText = modal.querySelector('#steamUrlSuccessText');
             
-            updateUserInterface();
+            let validatedSteamId = null;
             
-            clearTimeout(window.loadGamesTimeout);
-            window.loadGamesTimeout = setTimeout(() => {
-                loadGames();
-            }, 500);
-        }
-
-        // 全選用戶
-        function selectAllUsers() {
-            selectedUsers = [...allUsers];
-            updateUserInterface();
+            // 即時驗證輸入
+            urlInput.addEventListener('input', debounce(async () => {
+                const url = urlInput.value.trim();
+                if (!url) {
+                    hideValidationMessages();
+                    return;
+                }
+                
+                try {
+                    validatedSteamId = await parseSteamUrl(url);
+                    showSuccess(`成功解析Steam ID: ${validatedSteamId}`);
+                } catch (error) {
+                    showError(error.message);
+                    validatedSteamId = null;
+                }
+            }, 1000));
             
-            clearTimeout(window.loadGamesTimeout);
-            window.loadGamesTimeout = setTimeout(() => {
-                loadGames();
-            }, 500);
-        }
-
-        // 取消全選
-        function deselectAllUsers() {
-            selectedUsers = [];
-            updateUserInterface();
-            
-            clearTimeout(window.loadGamesTimeout);
-            window.loadGamesTimeout = setTimeout(() => {
-                loadGames();
-            }, 500);
-        }
-
-        // 重試失敗的用戶
-        async function retryFailedUsers() {
-            if (failedUsers.length === 0) return;
-            
-            showNotification(`正在重試 ${failedUsers.length} 個失敗的用戶...`, 'info');
-            
-            // 清除失敗用戶的緩存
-            failedUsers.forEach(user => {
-                gameDataCache.delete(user.id);
+            // 確認按鈕
+            confirmBtn.addEventListener('click', async () => {
+                const url = urlInput.value.trim();
+                if (!url) {
+                    showError('請輸入Steam個人資料連結');
+                    return;
+                }
+                
+                setLoading(true);
+                
+                try {
+                    let steamId = validatedSteamId;
+                    if (!steamId) {
+                        steamId = await parseSteamUrl(url);
+                    }
+                    
+                    await saveSteamIdToDatabase(steamId, url);
+                    
+                    document.body.removeChild(modal);
+                    showNotification('Steam帳號連結成功！正在載入遊戲資料...', 'success');
+                    loadUsers();
+                } catch (error) {
+                    showError(error.message);
+                    ErrorLogger.log(error);
+                } finally {
+                    setLoading(false);
+                }
             });
             
-            // 重新載入遊戲
-            await loadGames();
-        }
-
-        // 清除緩存功能
-        function clearGameDataCache() {
-            gameDataCache.clear();
-            failedUsers = [];
-            ErrorLogger.clear();
-            updateSystemStatus('steamApi', 'unknown');
-            showNotification('已清除遊戲數據緩存', 'success');
-        }
-
-        // 手動重新載入遊戲數據
-        async function reloadGameData(forceRefresh = false) {
-            if (forceRefresh) {
-                gameDataCache.clear();
-                failedUsers = [];
-                ErrorLogger.clear();
-            }
+            // 跳過按鈕
+            skipBtn.addEventListener('click', () => {
+                document.body.removeChild(modal);
+                showNotification('你可以稍後在設定中連結Steam帳號', 'info');
+                loadUsers();
+            });
             
-            await loadGames();
-        }
-
-        // 改進的載入遊戲函數
-        async function loadGames() {
-            if (selectedUsers.length === 0) {
-                allGames = [];
-                filteredGames = [];
-                updateGamesInterface();
-                return;
-            }
-            
-            if (isLoadingGames) {
-                console.log('遊戲載入中，跳過重複請求');
-                return;
-            }
-            
-            isLoadingGames = true;
-            showLoading(true);
-            
-            try {
-                showNotification('正在載入遊戲資料...', 'info');
-                
-                const allUserGames = [];
-                let totalGamesLoaded = 0;
-                let successCount = 0;
-                let errorCount = 0;
-                
-                // 重置失敗用戶列表（只保留這次載入真正失敗的）
-                const currentFailedUsers = [];
-                
-                for (let i = 0; i < selectedUsers.length; i++) {
-                    const user = selectedUsers[i];
-                    try {
-                        console.log(`載入用戶 ${user.name} 的遊戲...`);
-                        let games;
-                        
-                        // 檢查緩存
-                        if (gameDataCache.has(user.id)) {
-                            console.log(`使用用戶 ${user.name} 的緩存數據`);
-                            games = gameDataCache.get(user.id);
-                        } else {
-                            // 從資料庫載入
-                            games = await loadUserGamesFromDB(user.id);
-                            
-                            // 如果資料庫沒有數據，從API載入
-                            if (!games || games.length === 0) {
-                                games = await fetchUserGamesWithRetry(user.id);
-                                
-                                // 如果是已登入用戶，嘗試保存到資料庫（非阻塞）
-                                if (currentUser && games.length > 0) {
-                                    saveUserGamesToDB(user.id, games).catch(error => {
-                                        console.warn('保存遊戲數據失敗:', error.message);
-                                    });
-                                }
-                            }
-                            
-                            // 緩存數據
-                            gameDataCache.set(user.id, games);
-                        }
-                        
-                        // 更新用戶的遊戲數量
-                        user.gameCount = games.length;
-                        user.hasError = false;
-                        allUserGames.push(games);
-                        totalGamesLoaded += games.length;
-                        successCount++;
-                        
-                        // 移除之前失敗記錄
-                        const failedIndex = failedUsers.findIndex(u => u.id === user.id);
-                        if (failedIndex !== -1) {
-                            failedUsers.splice(failedIndex, 1);
-                        }
-                        
-                    } catch (error) {
-                        console.error(`載入用戶 ${user.name} 失敗:`, error);
-                        user.hasError = true;
-                        currentFailedUsers.push(user);
-                        allUserGames.push([]);
-                        errorCount++;
-                        
-                        ErrorLogger.log(new AppError(
-                            `載入用戶 ${user.name} 失敗`, 
-                            'steam-api', 
-                            error
-                        ));
-                    }
+            // Enter鍵確認
+            urlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !confirmBtn.disabled) {
+                    confirmBtn.click();
                 }
+            });
+            
+            // 輔助函數
+            function showError(message) {
+                errorText.textContent = message;
+                errorDiv.classList.remove('hidden');
+                successDiv.classList.add('hidden');
+                confirmBtn.disabled = true;
+            }
+            
+            function showSuccess(message) {
+                successText.textContent = message;
+                successDiv.classList.remove('hidden');
+                errorDiv.classList.add('hidden');
+                confirmBtn.disabled = false;
+            }
+            
+            function hideValidationMessages() {
+                errorDiv.classList.add('hidden');
+                successDiv.classList.add('hidden');
+                confirmBtn.disabled = false;
+            }
+            
+            function setLoading(loading) {
+                const btnText = confirmBtn.querySelector('.btn-text');
+                const btnLoading = confirmBtn.querySelector('.btn-loading');
                 
-                // 更新失敗用戶列表
-                failedUsers = currentFailedUsers;
-                
-                // 更新用戶界面以顯示遊戲數量和錯誤狀態
-                updateUserInterface();
-                
-                allGames = calculateCommonGames(allUserGames);
-                filterGames();
-                
-                // 更新API狀態
-                if (errorCount === 0) {
-                    updateSystemStatus('steamApi', 'connected');
-                } else if (successCount > 0) {
-                    updateSystemStatus('steamApi', 'warning');
+                if (loading) {
+                    btnText.classList.add('hidden');
+                    btnLoading.classList.remove('hidden');
+                    confirmBtn.disabled = true;
+                    skipBtn.disabled = true;
                 } else {
-                    updateSystemStatus('steamApi', 'error');
+                    btnText.classList.remove('hidden');
+                    btnLoading.classList.add('hidden');
+                    confirmBtn.disabled = false;
+                    skipBtn.disabled = false;
                 }
-                
-                // 顯示結果通知
-                if (totalGamesLoaded === 0 && errorCount > 0) {
-                    showNotification(`載入失敗：${errorCount} 個用戶無法載入遊戲數據`, 'error');
-                } else if (errorCount > 0) {
-                    showNotification(`部分成功：載入了 ${allGames.length} 個遊戲，${errorCount} 個用戶失敗`, 'warning');
-                } else {
-                    showNotification(`成功載入 ${allGames.length} 個不同的遊戲`, 'success');
-                }
-                
-            } catch (error) {
-                ErrorLogger.log(new AppError('載入遊戲失敗', 'general', error));
-                showNotification('載入遊戲資料失敗', 'error');
-                allGames = [];
-                filteredGames = [];
-                updateSystemStatus('steamApi', 'error');
-            } finally {
-                isLoadingGames = false;
-                showLoading(false);
-                updateGamesInterface();
             }
+            
+            // 自動聚焦輸入框
+            setTimeout(() => urlInput.focus(), 100);
         }
 
-        // 從資料庫載入用戶遊戲（改進錯誤處理）
-        async function loadUserGamesFromDB(steamId) {
+        // 保存Steam ID到資料庫
+        async function saveSteamIdToDatabase(steamId, steamUrl) {
             try {
-                if (!supabase) return null;
+                if (!supabase || !currentUser) {
+                    throw new AppError('無法連接到資料庫', 'database');
+                }
                 
-                const { data: user, error: userError } = await supabase
+                console.log(`保存Steam ID到資料庫: ${steamId}, URL: ${steamUrl}`);
+                
+                const userData = {
+                    discord_id: currentUser.id,
+                    username: currentUser.user_metadata?.full_name || currentUser.email || 'Discord User',
+                    avatar_url: currentUser.user_metadata?.avatar_url || null,
+                    steam_id: steamId,
+                    steam_profile_url: steamUrl,
+                    is_shared: false,
+                    game_count: 0,
+                    total_playtime: 0
+                };
+                
+                console.log('準備保存的用戶資料:', userData);
+                
+                // 嘗試插入或更新用戶記錄
+                const { data, error } = await supabase
                     .from('users')
-                    .select('id, game_count')
-                    .eq('steam_id', steamId)
-                    .maybeSingle(); // 使用 maybeSingle 避免多行錯誤
-                
-                if (userError) {
-                    if (userError.code === '42501' || userError.message.includes('RLS')) {
-                        console.log(`RLS政策限制訪問用戶 ${steamId}`);
-                        return null;
-                    }
-                    throw userError;
-                }
-                
-                if (!user) {
-                    console.log(`用戶 ${steamId} 在資料庫中不存在`);
-                    return null;
-                }
-                
-                if (!user.game_count || user.game_count === 0) {
-                    console.log(`用戶 ${steamId} 沒有遊戲記錄`);
-                    return null;
-                }
-                
-                const { data: userGames, error } = await supabase
-                    .from('user_games')
-                    .select(`
-                        playtime_forever,
-                        games!inner (
-                            steam_app_id,
-                            name,
-                            header_image
-                        )
-                    `)
-                    .eq('user_id', user.id)
-                    .limit(1000);
+                    .upsert(userData, { 
+                        onConflict: 'discord_id',
+                        ignoreDuplicates: false 
+                    })
+                    .select()
+                    .single();
                 
                 if (error) {
                     if (error.code === '42501' || error.message.includes('RLS')) {
-                        console.log(`RLS政策限制訪問用戶 ${steamId} 的遊戲`);
-                        return null;
-                    }
-                    throw error;
-                }
-                
-                if (!userGames || userGames.length === 0) {
-                    console.log(`用戶 ${steamId} 在資料庫中沒有遊戲數據`);
-                    return null;
-                }
-                
-                const games = userGames
-                    .filter(ug => ug.games && ug.games.steam_app_id)
-                    .map(ug => ({
-                        appid: ug.games.steam_app_id,
-                        name: ug.games.name || `Game ${ug.games.steam_app_id}`,
-                        playtime_forever: ug.playtime_forever || 0,
-                        img_icon_url: ug.games.header_image || ''
-                    }));
-                
-                console.log(`從資料庫載入用戶 ${steamId} 的 ${games.length} 個遊戲`);
-                return games;
-                
-            } catch (error) {
-                console.warn(`資料庫查詢用戶 ${steamId} 失敗:`, error.message);
-                return null;
-            }
-        }
-
-        // 改進的Steam API調用（增加重試機制）
-        async function fetchUserGamesWithRetry(steamId, maxRetries = 3) {
-            let lastError = null;
-            
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                    console.log(`第 ${attempt}/${maxRetries} 次嘗試載入用戶 ${steamId}`);
-                    const games = await fetchUserGames(steamId);
-                    
-                    if (games && games.length >= 0) { // 包括0個遊戲的情況
-                        return games;
-                    }
-                } catch (error) {
-                    lastError = error;
-                    console.warn(`第 ${attempt} 次嘗試失敗:`, error.message);
-                    
-                    if (attempt < maxRetries) {
-                        // 指數退避
-                        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-                        console.log(`等待 ${delay}ms 後重試...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    }
-                }
-            }
-            
-            throw new AppError(
-                `載入用戶 ${steamId} 失敗，已重試 ${maxRetries} 次`, 
-                'steam-api', 
-                lastError
-            );
-        }
-
-        // 獲取用戶遊戲（改進的版本）
-        async function fetchUserGames(steamId) {
-            if (!validateSteamId(steamId)) {
-                throw new AppError(`無效的 Steam ID: ${steamId}`, 'validation');
-            }
-            
-            const errors = [];
-            
-            for (let i = 0; i < CORS_PROXIES.length; i++) {
-                const proxy = CORS_PROXIES[i];
-                try {
-                    const steamUrl = `${STEAM_CONFIG.API_BASE}/IPlayerService/GetOwnedGames/v0001/?key=${STEAM_CONFIG.API_KEY}&steamid=${steamId}&format=json&include_appinfo=true`;
-                    const finalUrl = `${proxy.url}${encodeURIComponent(steamUrl)}`;
-                    
-                    console.log(`使用代理 ${proxy.name} (${i + 1}/${CORS_PROXIES.length})`);
-                    
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), proxy.timeout);
-                    
-                    const response = await fetch(finalUrl, {
-                        method: 'GET',
-                        signal: controller.signal,
-                        headers: {
-                            'Accept': 'application/json',
-                            'User-Agent': 'Steam Game Finder/1.0'
-                        }
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    
-                    const responseText = await response.text();
-                    let gameData;
-                    
-                    try {
-                        const jsonData = JSON.parse(responseText);
-                        
-                        if (jsonData.contents) {
-                            gameData = JSON.parse(jsonData.contents);
-                        } else if (jsonData.response) {
-                            gameData = jsonData;
-                        } else {
-                            throw new Error('未知的響應格式');
-                        }
-                        
-                    } catch (parseError) {
-                        throw new Error(`解析響應失敗: ${parseError.message}`);
-                    }
-                    
-                    if (gameData.response?.error) {
-                        throw new Error(`Steam API錯誤: ${gameData.response.error}`);
-                    }
-                    
-                    const rawGames = gameData.response?.games || [];
-                    
-                    if (rawGames.length === 0) {
-                        console.log(`Steam API 返回 0 個遊戲給用戶 ${steamId}`);
-                        
-                        if (!gameData.response?.games) {
-                            console.log('可能是隱私設置問題');
-                        }
-                    }
-                    
-                    const cleanGames = sanitizeGameData(rawGames);
-                    console.log(`成功載入用戶 ${steamId} 的 ${cleanGames.length} 個遊戲`);
-                    return cleanGames;
-                    
-                } catch (error) {
-                    const errorMsg = `代理 ${proxy.name} 失敗: ${error.message}`;
-                    console.error(errorMsg);
-                    errors.push(errorMsg);
-                    
-                    if (i < CORS_PROXIES.length - 1) {
-                        console.log('嘗試下一個代理...');
-                    }
-                }
-            }
-            
-            throw new AppError(
-                `所有代理失敗，無法載入用戶 ${steamId} 的遊戲`, 
-                'steam-api', 
-                { errors }
-            );
-        }
-
-        // 改進的保存用戶遊戲到資料庫
-        async function saveUserGamesToDB(steamId, games) {
-            try {
-                if (!supabase || !games || games.length === 0 || !currentUser) return;
-                
-                console.log(`嘗試保存用戶 ${steamId} 的 ${games.length} 個遊戲到資料庫`);
-                
-                // 嘗試查找或創建用戶
-                let userId = await findOrCreateUser(steamId);
-                if (!userId) {
-                    console.warn('無法創建或找到用戶，跳過資料庫保存');
-                    return;
-                }
-                
-                // 批量處理遊戲數據
-                await batchSaveGames(userId, games);
-                
-            } catch (error) {
-                console.warn('保存遊戲數據時發生錯誤:', error.message);
-                ErrorLogger.log(new AppError('保存遊戲數據失敗', 'database', error));
-            }
-        }
-
-        // 查找或創建用戶
-        async function findOrCreateUser(steamId) {
-            try {
-                // 首先嘗試查找用戶
-                const { data: user, error: findError } = await supabase
-                    .from('users')
-                    .select('id')
-                    .eq('steam_id', steamId)
-                    .maybeSingle();
-                
-                if (findError && findError.code !== '42501') {
-                    throw findError;
-                }
-                
-                if (user) {
-                    return user.id;
-                }
-                
-                // 用戶不存在，嘗試創建
-                const selectedUser = selectedUsers.find(u => u.id === steamId);
-                if (!selectedUser) {
-                    throw new Error('找不到對應的用戶信息');
-                }
-                
-                const { data: newUser, error: createError } = await supabase
-                    .from('users')
-                    .insert({
-                        discord_id: currentUser.id,
-                        username: selectedUser.name || `User ${steamId}`,
-                        avatar_url: selectedUser.avatar || null,
-                        steam_id: steamId,
-                        is_shared: selectedUser.isShared || false,
-                        game_count: 0,
-                        total_playtime: 0
-                    })
-                    .select('id')
-                    .single();
-                
-                if (createError) {
-                    if (createError.code === '42501') {
-                        console.warn('RLS政策阻止創建用戶');
-                        return null;
-                    }
-                    throw createError;
-                }
-                
-                return newUser.id;
-                
-            } catch (error) {
-                console.warn('查找或創建用戶失敗:', error.message);
-                return null;
-            }
-        }
-
-        // 批量保存遊戲
-        async function batchSaveGames(userId, games) {
-            try {
-                const batchSize = 100; // 分批處理避免超時
-                
-                for (let i = 0; i < games.length; i += batchSize) {
-                    const batch = games.slice(i, i + batchSize);
-                    await saveBatchGames(userId, batch);
-                }
-                
-                // 更新用戶統計
-                const totalPlaytime = games.reduce((total, game) => total + (game.playtime_forever || 0), 0);
-                await supabase
-                    .from('users')
-                    .update({ 
-                        game_count: games.length,
-                        total_playtime: totalPlaytime
-                    })
-                    .eq('id', userId);
-                
-                console.log(`成功保存 ${games.length} 個遊戲`);
-                
-            } catch (error) {
-                console.warn('批量保存遊戲失敗:', error.message);
-            }
-        }
-
-        // 保存單批遊戲
-        async function saveBatchGames(userId, games) {
-            try {
-                // 準備遊戲數據
-                const gamesToInsert = games.map(game => ({
-                    steam_app_id: game.appid,
-                    name: sanitizeText(game.name),
-                    header_image: `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`
-                }));
-                
-                // 嘗試插入遊戲（忽略RLS錯誤）
-                await supabase
-                    .from('games')
-                    .upsert(gamesToInsert, { 
-                        onConflict: 'steam_app_id',
-                        ignoreDuplicates: false 
-                    });
-                
-                // 獲取遊戲ID映射
-                const appIds = games.map(g => g.appid);
-                const { data: existingGames } = await supabase
-                    .from('games')
-                    .select('id, steam_app_id')
-                    .in('steam_app_id', appIds);
-                
-                if (!existingGames) return;
-                
-                // 創建用戶遊戲關聯
-                const gameIdMap = new Map();
-                existingGames.forEach(g => gameIdMap.set(g.steam_app_id, g.id));
-                
-                const userGamesToInsert = games
-                    .filter(game => gameIdMap.has(game.appid))
-                    .map(game => ({
-                        user_id: userId,
-                        game_id: gameIdMap.get(game.appid),
-                        playtime_forever: game.playtime_forever || 0
-                    }));
-                
-                if (userGamesToInsert.length > 0) {
-                    // 先刪除舊關聯
-                    await supabase
-                        .from('user_games')
-                        .delete()
-                        .eq('user_id', userId);
-                    
-                    // 插入新關聯
-                    await supabase
-                        .from('user_games')
-                        .insert(userGamesToInsert);
-                }
-                
-            } catch (error) {
-                if (error.code !== '42501') {
-                    throw error;
-                }
-                console.warn('RLS政策阻止保存，跳過資料庫操作');
-            }
-        }
-
-        // 文本清理函數
-        function sanitizeText(text) {
-            if (typeof text !== 'string') return String(text || '');
-            return text
-                .trim()
-                .replace(/[\r\n\t]/g, ' ')
-                .replace(/\s+/g, ' ')
-                .substring(0, 255); // 限制長度
-        }
-
-        // 清理和驗證遊戲數據（改進版）
-        function sanitizeGameData(games) {
-            if (!Array.isArray(games)) {
-                console.warn('遊戲數據不是陣列:', games);
-                return [];
-            }
-            
-            return games
-                .filter(game => {
-                    if (!game || typeof game !== 'object') return false;
-                    if (!game.appid || typeof game.appid !== 'number') return false;
-                    if (!game.name || typeof game.name !== 'string' || game.name.trim().length === 0) return false;
-                    return true;
-                })
-                .map(game => {
-                    try {
-                        let cleanName = sanitizeText(game.name);
-                        
-                        // 處理特殊字符
-                        cleanName = cleanName
-                            .replace(/[™®©]/g, '') // 移除商標符號
-                            .replace(/['']/g, "'") // 統一撇號
-                            .replace(/[""]/g, '"') // 統一引號
-                            .replace(/…/g, '...') // 統一省略號
-                            .trim();
-                        
-                        return {
-                            appid: parseInt(game.appid),
-                            name: cleanName,
-                            playtime_forever: parseInt(game.playtime_forever) || 0,
-                            img_icon_url: game.img_icon_url || ''
-                        };
-                    } catch (error) {
-                        console.warn('清理遊戲數據失敗:', error, game);
-                        return null;
-                    }
-                })
-                .filter(game => game !== null);
-        }
-
-        // 計算共同遊戲（改進錯誤處理）
-        function calculateCommonGames(allUserGames) {
-            const gameOccurrences = {};
-            
-            try {
-                allUserGames.forEach((userGames, userIndex) => {
-                    if (!Array.isArray(userGames)) {
-                        console.warn(`用戶 ${userIndex} 的遊戲數據不是陣列:`, userGames);
+                        console.warn('RLS政策限制，但Steam ID已記錄在本地');
+                        // 即使資料庫保存失敗，也將用戶信息添加到本地列表
+                        addUserToLocalList(userData);
+                        showNotification('Steam連結已保存（本地模式）', 'warning');
                         return;
                     }
-                    
-                    userGames.forEach(game => {
-                        try {
-                            if (!game || !game.appid || !game.name) {
-                                return;
-                            }
-                            
-                            const appid = parseInt(game.appid);
-                            if (isNaN(appid)) return;
-                            
-                            if (!gameOccurrences[appid]) {
-                                gameOccurrences[appid] = {
-                                    ...game,
-                                    appid: appid,
-                                    owners: [],
-                                    totalPlaytime: 0
-                                };
-                            }
-                            
-                            const playtime = parseInt(game.playtime_forever) || 0;
-                            gameOccurrences[appid].owners.push({
-                                userIndex,
-                                playtime: playtime
-                            });
-                            gameOccurrences[appid].totalPlaytime += playtime;
-                        } catch (error) {
-                            console.warn('處理遊戲時發生錯誤:', error, game);
-                        }
-                    });
-                });
+                    throw new AppError(`資料庫保存失敗: ${error.message}`, 'database', error);
+                }
                 
-                const result = Object.values(gameOccurrences)
-                    .map(game => {
-                        try {
-                            const commonality = game.owners.length;
-                            const commonalityPercentage = Math.round((commonality / selectedUsers.length) * 100);
-                            
-                            return {
-                                ...game,
-                                commonality,
-                                commonalityPercentage,
-                                isCommon: commonality >= Math.max(1, Math.ceil(selectedUsers.length * 0.5)),
-                                averagePlaytime: commonality > 0 ? Math.round(game.totalPlaytime / commonality) : 0
-                            };
-                        } catch (error) {
-                            console.warn('計算遊戲統計時發生錯誤:', error, game);
-                            return null;
-                        }
-                    })
-                    .filter(game => game !== null);
+                console.log('Steam ID保存成功到資料庫:', data);
+                showNotification('Steam連結已成功保存到資料庫', 'success');
                 
-                console.log(`成功計算 ${result.length} 個遊戲的共通度`);
-                return result;
+                // 驗證保存結果
+                await verifySteamIdSaved(steamId);
                 
             } catch (error) {
-                ErrorLogger.log(new AppError('計算共同遊戲時發生錯誤', 'calculation', error));
-                return [];
-            }
-        }
-
-        // 其餘函數保持不變...
-        // 處理搜尋輸入
-        function handleSearchInput() {
-            const searchTerm = elements.searchInput.value.trim();
-            const clearBtn = document.getElementById('clearSearch');
-            
-            if (clearBtn) {
-                if (searchTerm) {
-                    clearBtn.classList.remove('hidden');
-                } else {
-                    clearBtn.classList.add('hidden');
-                }
-            }
-            
-            filterGames();
-        }
-
-        // 清除搜尋
-        function clearSearch() {
-            elements.searchInput.value = '';
-            const clearBtn = document.getElementById('clearSearch');
-            if (clearBtn) {
-                clearBtn.classList.add('hidden');
-            }
-            filterGames();
-        }
-
-        // 篩選遊戲
-        function filterGames() {
-            let filtered = [...allGames];
-            
-            switch (currentFilter) {
-                case 'common':
-                    filtered = filtered.filter(game => game.isCommon);
-                    break;
-                case 'majority':
-                    filtered = filtered.filter(game => game.commonalityPercentage >= 50);
-                    break;
-                case 'popular':
-                    filtered = filtered.filter(game => game.commonalityPercentage >= 75);
-                    break;
-                case 'highPlaytime':
-                    filtered = filtered.filter(game => game.averagePlaytime >= 300);
-                    break;
-            }
-            
-            const searchTerm = elements.searchInput ? elements.searchInput.value.toLowerCase().trim() : '';
-            if (searchTerm) {
-                filtered = filtered.filter(game => 
-                    game.name.toLowerCase().includes(searchTerm)
-                );
-            }
-            
-            filteredGames = filtered;
-            sortGames();
-        }
-
-        // 排序遊戲
-        function sortGames() {
-            switch (currentSort) {
-                case 'name':
-                    filteredGames.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
-                    break;
-                case 'playtime':
-                    filteredGames.sort((a, b) => b.averagePlaytime - a.averagePlaytime);
-                    break;
-                case 'appid':
-                    filteredGames.sort((a, b) => a.appid - b.appid);
-                    break;
-                case 'commonality':
-                default:
-                    filteredGames.sort((a, b) => {
-                        if (b.commonality !== a.commonality) {
-                            return b.commonality - a.commonality;
-                        }
-                        return b.averagePlaytime - a.averagePlaytime;
+                console.error('保存Steam ID時發生錯誤:', error);
+                
+                if (error.type === 'database' && (error.message.includes('RLS') || error.message.includes('42501'))) {
+                    // RLS錯誤時，添加到本地列表
+                    addUserToLocalList({
+                        id: steamId,
+                        name: currentUser.user_metadata?.full_name || currentUser.email || 'Discord User',
+                        avatar: currentUser.user_metadata?.avatar_url,
+                        gameCount: 0,
+                        isShared: false,
+                        discordId: currentUser.id,
+                        steamProfileUrl: steamUrl
                     });
-                    break;
+                    showNotification('Steam連結已保存（本地模式）', 'warning');
+                    return;
+                }
+                throw error;
             }
-            
-            updateGamesInterface();
         }
-
-        // 更新遊戲界面
-        function updateGamesInterface() {
+        
+        // 驗證Steam ID是否正確保存
+        async function verifySteamIdSaved(steamId) {
             try {
-                if (!elements.gamesGrid || !elements.emptyState) {
-                    console.warn('遊戲界面元素不存在');
+                if (!supabase || !currentUser) return;
+                
+                const { data: user, error } = await supabase
+                    .from('users')
+                    .select('steam_id, steam_profile_url, username')
+                    .eq('discord_id', currentUser.id)
+                    .single();
+                
+                if (error && error.code !== '42501') {
+                    console.warn('驗證Steam ID保存失敗:', error);
                     return;
                 }
                 
-                elements.gamesGrid.innerHTML = '';
-                
-                if (filteredGames.length === 0) {
-                    elements.emptyState.classList.remove('hidden');
-                    elements.gamesGrid.classList.add('hidden');
+                if (user && user.steam_id === steamId) {
+                    console.log('✅ Steam ID驗證成功:', {
+                        username: user.username,
+                        steam_id: user.steam_id,
+                        steam_profile_url: user.steam_profile_url
+                    });
                 } else {
-                    elements.emptyState.classList.add('hidden');
-                    elements.gamesGrid.classList.remove('hidden');
-                    
-                    const fragment = document.createDocumentFragment();
-                    let createdCount = 0;
-                    
-                    for (let i = 0; i < filteredGames.length; i++) {
-                        try {
-                            const game = filteredGames[i];
-                            if (game && game.name && game.appid) {
-                                const gameCard = createGameCard(game);
-                                if (gameCard) {
-                                    fragment.appendChild(gameCard);
-                                    createdCount++;
-                                }
-                            }
-                        } catch (error) {
-                            console.error(`創建遊戲卡片 ${i} 時發生錯誤:`, error, filteredGames[i]);
-                        }
-                    }
-                    
-                    elements.gamesGrid.appendChild(fragment);
-                    console.log(`成功創建 ${createdCount} 個遊戲卡片，顯示 ${filteredGames.length} 個遊戲`);
+                    console.warn('⚠️ Steam ID驗證失敗，可能保存不完整');
                 }
-                
-                updateStats();
                 
             } catch (error) {
-                ErrorLogger.log(new AppError('更新遊戲界面失敗', 'ui', error));
-                showNotification('顯示遊戲時發生錯誤', 'error');
+                console.warn('驗證Steam ID時發生錯誤:', error);
             }
         }
 
-        // 創建遊戲卡片
-        function createGameCard(game) {
-            const card = document.createElement('div');
-            card.className = 'game-card glass-effect rounded-xl overflow-hidden fade-in';
-            
-            const headerImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`;
-            const capsuleImageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/capsule_231x87.jpg`;
-            const fallbackImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(game.name)}&size=300&background=334155&color=94a3b8`;
-            
-            const gameGenres = getGameGenres(game.appid);
-            const commonalityColor = game.commonalityPercentage >= 75 ? 'text-green-400' : 
-                                   game.commonalityPercentage >= 50 ? 'text-yellow-400' : 'text-blue-400';
-            
-            const img = document.createElement('img');
-            img.src = headerImageUrl;
-            img.alt = game.name;
-            img.className = 'w-full h-32 object-cover transition-transform duration-300 group-hover:scale-105';
-            
-            let errorCount = 0;
-            img.onerror = function() {
-                errorCount++;
-                if (errorCount === 1) {
-                    this.src = capsuleImageUrl;
-                } else if (errorCount === 2) {
-                    this.src = fallbackImageUrl;
-                }
+        // 添加用戶到本地列表
+        function addUserToLocalList(userData) {
+            const userForList = {
+                id: userData.steam_id || userData.id,
+                name: userData.username || userData.name,
+                avatar: userData.avatar_url || userData.avatar,
+                gameCount: userData.game_count || userData.gameCount || 0,
+                totalPlaytime: userData.total_playtime || userData.totalPlaytime || 0,
+                isShared: userData.is_shared || userData.isShared || false,
+                discordId: userData.discord_id || userData.discordId,
+                steamProfileUrl: userData.steam_profile_url || userData.steamProfileUrl,
+                isCurrentUser: userData.discord_id === currentUser?.id || userData.discordId === currentUser?.id
             };
             
-            const cardContent = document.createElement('div');
-            cardContent.innerHTML = `
-                <div class="relative group">
-                    <div class="img-container"></div>
-                    
-                    <div class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                        <div class="text-center text-white p-2">
-                            <p class="text-sm font-medium mb-1">點擊查看Steam商店</p>
-                            <p class="text-xs text-slate-300">App ID: ${game.appid}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="absolute top-2 right-2">
-                        <div class="bg-black/80 backdrop-blur-sm rounded-full px-2 py-1 text-xs font-medium border border-white/20">
-                            <span class="${commonalityColor}">${game.commonality}</span>
-                            <span class="text-slate-300">/${selectedUsers.length}</span>
-                        </div>
-                    </div>
-                    
-                    ${game.isCommon ? `
-                        <div class="absolute top-2 left-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-2 py-1 rounded-full text-xs font-medium shadow-lg">
-                            共同遊戲
-                        </div>
-                    ` : ''}
-                    
-                    ${game.commonalityPercentage >= 75 ? `
-                        <div class="absolute bottom-2 left-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">
-                            熱門
-                        </div>
-                    ` : ''}
-                </div>
-                
-                <div class="p-4">
-                    <h3 class="font-medium text-sm mb-3 line-clamp-2 leading-tight game-title"></h3>
-                    
-                    ${gameGenres.length > 0 ? `
-                        <div class="flex flex-wrap gap-1 mb-3">
-                            ${gameGenres.slice(0, 2).map(genre => 
-                                `<span class="px-2 py-1 bg-slate-600/50 text-slate-300 text-xs rounded-full">${escapeHtml(genre)}</span>`
-                            ).join('')}
-                        </div>
-                    ` : ''}
-                    
-                    <div class="mb-3">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="text-xs text-slate-400">擁有率</span>
-                            <span class="text-xs font-medium ${commonalityColor}">${game.commonalityPercentage}%</span>
-                        </div>
-                        <div class="w-full bg-slate-700 rounded-full h-2">
-                            <div class="bg-gradient-to-r ${getProgressBarColor(game.commonalityPercentage)} h-2 rounded-full transition-all duration-500" 
-                                 style="width: ${game.commonalityPercentage}%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                        <div class="text-center">
-                            <div class="font-medium text-white">${Math.round(game.averagePlaytime / 60)}h</div>
-                            <div>平均時間</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="font-medium text-white">${game.owners.length}</div>
-                            <div>擁有者</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="absolute inset-0 rounded-xl opacity-0 bg-blue-400/20 pointer-events-none transition-opacity duration-200 card-ripple"></div>
-            `;
-            
-            card.appendChild(cardContent);
-            
-            const imgContainer = card.querySelector('.img-container');
-            imgContainer.appendChild(img);
-            
-            const titleElement = card.querySelector('.game-title');
-            titleElement.textContent = game.name;
-            titleElement.title = game.name;
-            
-            card.addEventListener('click', (e) => {
-                const rippleElement = card.querySelector('.card-ripple');
-                if (rippleElement) {
-                    rippleElement.style.opacity = '1';
-                    setTimeout(() => {
-                        rippleElement.style.opacity = '0';
-                    }, 200);
-                }
-                
-                window.open(`${STEAM_CONFIG.STORE_BASE}/${game.appid}`, '_blank');
-            });
-
-            card.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                showGameDetails(game);
-            });
-            
-            return card;
-        }
-
-        // 安全的HTML轉義函數
-        function escapeHtml(unsafe) {
-            if (typeof unsafe !== 'string') return String(unsafe || '');
-            return unsafe
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;")
-                .replace(/\\/g, "&#92;")
-                .replace(/\n/g, " ")
-                .replace(/\r/g, " ")
-                .replace(/\t/g, " ");
-        }
-
-        // 獲取遊戲類型標籤
-        function getGameGenres(appId) {
-            const gameGenresMap = {
-                570: ['MOBA', 'Free to Play'],
-                730: ['FPS', '競技'],
-                440: ['FPS', 'Free to Play'],
-                271590: ['開放世界', '動作'],
-                431960: ['工具', '個人化'],
-                252490: ['生存', '多人'],
-                578080: ['大逃殺', 'FPS'],
-                292030: ['RPG', '開放世界']
-            };
-            
-            const genres = gameGenresMap[appId] || ['遊戲'];
-            return genres.map(genre => escapeHtml(genre));
-        }
-
-        // 獲取進度條顏色
-        function getProgressBarColor(percentage) {
-            if (percentage >= 75) return 'from-green-500 to-green-600';
-            if (percentage >= 50) return 'from-yellow-500 to-yellow-600';
-            if (percentage >= 25) return 'from-blue-500 to-blue-600';
-            return 'from-gray-500 to-gray-600';
-        }
-
-        // 更新統計
-        function updateStats() {
-            try {
-                if (elements.totalGames) elements.totalGames.textContent = allGames.length;
-                if (elements.commonGames) elements.commonGames.textContent = allGames.filter(g => g.isCommon).length;
-                if (elements.selectedUsers) elements.selectedUsers.textContent = selectedUsers.length;
-                if (elements.showingGames) elements.showingGames.textContent = filteredGames.length;
-            } catch (error) {
-                console.error('更新統計失敗:', error);
+            // 檢查是否已存在
+            const existingIndex = allUsers.findIndex(u => u.id === userForList.id);
+            if (existingIndex !== -1) {
+                allUsers[existingIndex] = userForList;
+                console.log('已更新本地用戶:', userForList);
+            } else {
+                allUsers.push(userForList);
+                console.log('已添加用戶到本地列表:', userForList);
             }
         }
-
-        // 顯示載入狀態
-        function showLoading(show) {
-            try {
-                if (show) {
-                    if (elements.loadingState) elements.loadingState.classList.remove('hidden');
-                    if (elements.gamesGrid) elements.gamesGrid.classList.add('hidden');
-                    if (elements.emptyState) elements.emptyState.classList.add('hidden');
-                } else {
-                    if (elements.loadingState) elements.loadingState.classList.add('hidden');
-                }
-            } catch (error) {
-                console.error('顯示載入狀態失敗:', error);
-            }
-        }
-
-        // 快速篩選設置
-        function setQuickFilter(filterType) {
-            document.querySelectorAll('.filter-tag').forEach(btn => {
-                btn.classList.remove('active');
-                if (btn.dataset.filter === filterType) {
-                    btn.classList.add('active');
-                }
-            });
-            
-            currentFilter = filterType;
-            filterGames();
-            
-            const filterNames = {
-                'common': '共同遊戲',
-                'popular': '熱門遊戲'
-            };
-            showNotification(`已篩選：${filterNames[filterType]}`, 'success');
-        }
-
-        // 重置所有篩選
-        function resetAllFilters() {
-            document.querySelectorAll('.filter-tag').forEach(btn => {
-                btn.classList.remove('active');
-                if (btn.dataset.filter === 'all') {
-                    btn.classList.add('active');
-                }
-            });
-            currentFilter = 'all';
-            
-            if (elements.sortSelect) {
-                elements.sortSelect.value = 'commonality';
-            }
-            currentSort = 'commonality';
-            
-            if (elements.searchInput) {
-                elements.searchInput.value = '';
-            }
-            const clearBtn = document.getElementById('clearSearch');
-            if (clearBtn) {
-                clearBtn.classList.add('hidden');
-            }
-            
-            filterGames();
-            showNotification('已重置所有篩選條件', 'success');
-        }
-
-        // 導出遊戲清單
-        function exportGameList() {
-            if (filteredGames.length === 0) {
-                showNotification('沒有遊戲可導出', 'warning');
-                return;
-            }
-
-            const exportData = {
-                exportTime: new Date().toISOString(),
-                selectedUsers: selectedUsers.map(u => ({ id: u.id, name: u.name })),
-                filter: currentFilter,
-                sort: currentSort,
-                totalGames: filteredGames.length,
-                systemStatus: systemStatus,
-                errors: ErrorLogger.errors.slice(-10), // 最近10個錯誤
-                games: filteredGames.map(game => ({
-                    appId: game.appid,
-                    name: game.name,
-                    commonality: game.commonality,
-                    commonalityPercentage: game.commonalityPercentage,
-                    averagePlaytime: game.averagePlaytime,
-                    isCommon: game.isCommon,
-                    steamUrl: `${STEAM_CONFIG.STORE_BASE}/${game.appid}`
-                }))
-            };
-
-            const dataStr = JSON.stringify(exportData, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
-            
-            const downloadLink = document.createElement('a');
-            downloadLink.href = url;
-            downloadLink.download = `steam-common-games-${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
-            URL.revokeObjectURL(url);
-
-            showNotification(`已導出 ${filteredGames.length} 個遊戲的清單`, 'success');
-        }
-
-        // 顯示遊戲詳細資訊
-        function showGameDetails(game) {
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
-            
-            const ownersList = game.owners && game.owners.length > 0 
-                ? game.owners.map((owner, index) => {
-                    const user = selectedUsers[owner.userIndex];
-                    if (!user) return '';
-                    return `
-                        <div class="flex items-center justify-between p-2 bg-slate-700/50 rounded">
-                            <div class="flex items-center space-x-2">
-                                <img src="${user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`}" 
-                                     class="w-6 h-6 rounded-full" alt="${escapeHtml(user.name)}">
-                                <span class="text-sm">${escapeHtml(user.name)}</span>
-                            </div>
-                            <span class="text-xs text-slate-400">${Math.round(owner.playtime / 60)}h</span>
-                        </div>
-                    `;
-                }).join('')
-                : '<div class="text-center text-slate-400 py-4">沒有用戶擁有此遊戲</div>';
-
-            modal.innerHTML = `
-                <div class="glass-effect rounded-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
-                    <div class="p-6">
-                        <div class="flex justify-between items-start mb-4">
-                            <h2 class="text-lg font-bold text-white">${escapeHtml(game.name)}</h2>
-                            <button class="text-slate-400 hover:text-white close-modal">
-                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                </svg>
-                            </button>
-                        </div>
-                        
-                        <img src="https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg" 
-                             alt="${escapeHtml(game.name)}" 
-                             class="w-full h-32 object-cover rounded-lg mb-4"
-                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(game.name)}&size=400&background=334155&color=94a3b8'">
-                        
-                        <div class="grid grid-cols-2 gap-4 mb-4">
-                            <div class="text-center p-3 bg-slate-700/30 rounded-lg">
-                                <div class="text-xl font-bold text-blue-400">${game.commonality || 0}</div>
-                                <div class="text-xs text-slate-400">擁有者數量</div>
-                            </div>
-                            <div class="text-center p-3 bg-slate-700/30 rounded-lg">
-                                <div class="text-xl font-bold text-green-400">${game.commonalityPercentage || 0}%</div>
-                                <div class="text-xs text-slate-400">擁有率</div>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <h3 class="text-sm font-medium text-slate-300 mb-2">遊戲擁有者</h3>
-                            <div class="space-y-2">
-                                ${ownersList}
-                            </div>
-                        </div>
-                        
-                        <div class="flex space-x-2">
-                            <button class="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors open-steam">
-                                在Steam中打開
-                            </button>
-                            <button class="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors close-modal">
-                                關閉
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            modal.querySelector('.open-steam').addEventListener('click', () => {
-                window.open(`${STEAM_CONFIG.STORE_BASE}/${game.appid}`, '_blank');
-            });
-
-            modal.querySelectorAll('.close-modal').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    document.body.removeChild(modal);
-                });
-            });
-
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    document.body.removeChild(modal);
-                }
-            });
-
-            document.body.appendChild(modal);
-        }
-
-        // 顯示幫助彈窗
-        function showHelpModal() {
+        function showSteamTestModal() {
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
             
@@ -2039,7 +1133,7 @@
                 <div class="glass-effect rounded-xl max-w-lg w-full">
                     <div class="p-6">
                         <div class="flex justify-between items-start mb-4">
-                            <h2 class="text-lg font-bold text-white">快捷鍵說明 & 系統狀態</h2>
+                            <h2 class="text-lg font-bold text-white">Steam URL 測試工具</h2>
                             <button class="text-slate-400 hover:text-white close-modal">
                                 <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
@@ -2047,881 +1141,145 @@
                             </button>
                         </div>
                         
-                        <!-- 系統狀態 -->
-                        <div class="mb-6 p-4 bg-slate-700/30 rounded-lg">
-                            <h3 class="text-sm font-medium text-slate-300 mb-2">系統狀態</h3>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-slate-400">資料庫</span>
-                                    <div class="flex items-center space-x-2">
-                                        <div class="w-3 h-3 rounded-full ${
-                                            systemStatus.database === 'connected' ? 'bg-green-500' :
-                                            systemStatus.database === 'warning' ? 'bg-yellow-500' :
-                                            systemStatus.database === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                                        }"></div>
-                                        <span class="text-xs">${
-                                            systemStatus.database === 'connected' ? '正常' :
-                                            systemStatus.database === 'warning' ? '警告' :
-                                            systemStatus.database === 'error' ? '錯誤' : '未知'
-                                        }</span>
-                                    </div>
-                                </div>
-                                <div class="flex items-center justify-between">
-                                    <span class="text-slate-400">Steam API</span>
-                                    <div class="flex items-center space-x-2">
-                                        <div class="w-3 h-3 rounded-full ${
-                                            systemStatus.steamApi === 'connected' ? 'bg-green-500' :
-                                            systemStatus.steamApi === 'warning' ? 'bg-yellow-500' :
-                                            systemStatus.steamApi === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                                        }"></div>
-                                        <span class="text-xs">${
-                                            systemStatus.steamApi === 'connected' ? '正常' :
-                                            systemStatus.steamApi === 'warning' ? '警告' :
-                                            systemStatus.steamApi === 'error' ? '錯誤' : '未知'
-                                        }</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
                         <div class="space-y-4">
-                            <div class="grid grid-cols-1 gap-3">
-                                <div class="flex justify-between items-center p-3 bg-slate-700/30 rounded-lg">
-                                    <span class="text-slate-300">搜尋遊戲</span>
-                                    <kbd class="px-2 py-1 bg-slate-600 rounded text-xs text-slate-200">Ctrl + F</kbd>
-                                </div>
-                                <div class="flex justify-between items-center p-3 bg-slate-700/30 rounded-lg">
-                                    <span class="text-slate-300">只看共同遊戲</span>
-                                    <kbd class="px-2 py-1 bg-slate-600 rounded text-xs text-slate-200">Ctrl + C</kbd>
-                                </div>
-                                <div class="flex justify-between items-center p-3 bg-slate-700/30 rounded-lg">
-                                    <span class="text-slate-300">重置篩選</span>
-                                    <kbd class="px-2 py-1 bg-slate-600 rounded text-xs text-slate-200">Ctrl + R</kbd>
-                                </div>
-                                <div class="flex justify-between items-center p-3 bg-slate-700/30 rounded-lg">
-                                    <span class="text-slate-300">導出清單</span>
-                                    <kbd class="px-2 py-1 bg-slate-600 rounded text-xs text-slate-200">Ctrl + E</kbd>
-                                </div>
-                                <div class="flex justify-between items-center p-3 bg-slate-700/30 rounded-lg">
-                                    <span class="text-slate-300">快速篩選 1-4</span>
-                                    <kbd class="px-2 py-1 bg-slate-600 rounded text-xs text-slate-200">Ctrl + 1~4</kbd>
-                                </div>
-                                <div class="flex justify-between items-center p-3 bg-slate-700/30 rounded-lg">
-                                    <span class="text-slate-300">關閉彈窗/清除搜尋</span>
-                                    <kbd class="px-2 py-1 bg-slate-600 rounded text-xs text-slate-200">Esc</kbd>
-                                </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">測試Steam URL</label>
+                                <input type="url" id="testSteamUrlInput" 
+                                       placeholder="輸入Steam個人資料連結..." 
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
                             </div>
                             
-                            <div class="border-t border-slate-600/30 pt-4">
-                                <h3 class="text-sm font-medium text-slate-300 mb-2">滑鼠操作</h3>
-                                <div class="space-y-2 text-sm text-slate-400">
-                                    <div>• 左鍵點擊遊戲卡片：打開Steam商店頁面</div>
-                                    <div>• 右鍵點擊遊戲卡片：顯示遊戲詳細資訊</div>
-                                    <div>• 懸停在遊戲卡片上：顯示額外資訊</div>
-                                </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="testDirectUrl" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                                    測試直接ID
+                                </button>
+                                <button id="testCustomUrl" class="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                                    測試自定義URL
+                                </button>
                             </div>
                             
-                            ${ErrorLogger.errors.length > 0 ? `
-                                <div class="border-t border-slate-600/30 pt-4">
-                                    <h3 class="text-sm font-medium text-slate-300 mb-2">最近錯誤 (${ErrorLogger.errors.length})</h3>
-                                    <div class="space-y-1 text-xs text-slate-400 max-h-32 overflow-y-auto">
-                                        ${ErrorLogger.errors.slice(-5).map(error => 
-                                            `<div>${error.type}: ${error.message}</div>`
-                                        ).join('')}
-                                    </div>
+                            <div id="testResults" class="hidden bg-slate-700/50 rounded-lg p-4">
+                                <h3 class="text-sm font-medium text-slate-300 mb-2">測試結果</h3>
+                                <div id="testOutput" class="text-xs text-slate-400 font-mono whitespace-pre-wrap"></div>
+                            </div>
+                            
+                            <div class="bg-slate-700/30 rounded-lg p-3">
+                                <h3 class="text-sm font-medium text-slate-300 mb-2">測試範例</h3>
+                                <div class="space-y-1 text-xs text-slate-400">
+                                    <div>直接ID: https://steamcommunity.com/profiles/76561198123456789</div>
+                                    <div>自定義URL: https://steamcommunity.com/id/your-custom-name</div>
                                 </div>
-                            ` : ''}
+                            </div>
                         </div>
                         
                         <div class="mt-6">
-                            <button class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors close-modal">
-                                我知道了
+                            <button class="w-full bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors close-modal">
+                                關閉
                             </button>
                         </div>
                     </div>
                 </div>
             `;
-
+            
+            document.body.appendChild(modal);
+            
+            const urlInput = modal.querySelector('#testSteamUrlInput');
+            const testDirectBtn = modal.querySelector('#testDirectUrl');
+            const testCustomBtn = modal.querySelector('#testCustomUrl');
+            const testResults = modal.querySelector('#testResults');
+            const testOutput = modal.querySelector('#testOutput');
+            
+            // 預填一些測試URL
+            const testUrls = [
+                'https://steamcommunity.com/profiles/76561198123456789',
+                'https://steamcommunity.com/id/gabelogannewell'
+            ];
+            
+            testDirectBtn.addEventListener('click', () => {
+                urlInput.value = testUrls[0];
+                runTest();
+            });
+            
+            testCustomBtn.addEventListener('click', () => {
+                urlInput.value = testUrls[1];
+                runTest();
+            });
+            
+            urlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    runTest();
+                }
+            });
+            
+            async function runTest() {
+                const url = urlInput.value.trim();
+                if (!url) return;
+                
+                testResults.classList.remove('hidden');
+                testOutput.textContent = '正在測試...\n';
+                
+                try {
+                    testOutput.textContent += `輸入URL: ${url}\n`;
+                    testOutput.textContent += `開始解析...\n`;
+                    
+                    const steamId = await parseSteamUrl(url);
+                    
+                    testOutput.textContent += `✅ 解析成功！\n`;
+                    testOutput.textContent += `Steam ID: ${steamId}\n`;
+                    testOutput.textContent += `驗證Steam ID格式: ${validateSteamId(steamId) ? '✅ 有效' : '❌ 無效'}\n`;
+                    
+                    // 如果當前用戶已登入，可以選擇保存
+                    if (currentUser) {
+                        testOutput.textContent += `\n可以保存到資料庫 (已登入)\n`;
+                    } else {
+                        testOutput.textContent += `\n需要登入才能保存到資料庫\n`;
+                    }
+                    
+                } catch (error) {
+                    testOutput.textContent += `❌ 解析失敗: ${error.message}\n`;
+                    testOutput.textContent += `錯誤類型: ${error.type || 'unknown'}\n`;
+                    
+                    if (error.details) {
+                        testOutput.textContent += `詳細信息: ${JSON.stringify(error.details, null, 2)}\n`;
+                    }
+                }
+            }
+            
+            // 關閉彈窗
             modal.querySelectorAll('.close-modal').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.body.removeChild(modal);
                 });
             });
-
+            
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
                     document.body.removeChild(modal);
                 }
             });
-
-            document.body.appendChild(modal);
+            
+            setTimeout(() => urlInput.focus(), 100);
         }
-
-        // 鍵盤快捷鍵處理
-        function handleKeyboardShortcuts(e) {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
-                return;
-            }
-
-            switch (e.key.toLowerCase()) {
-                case 'f':
-                    if (e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        elements.searchInput?.focus();
-                    }
-                    break;
-                case 'c':
-                    if (e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        setQuickFilter('common');
-                    }
-                    break;
-                case 'r':
-                    if (e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        resetAllFilters();
-                    }
-                    break;
-                case 'e':
-                    if (e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        exportGameList();
-                    }
-                    break;
-                case 'escape':
-                    const modal = document.querySelector('.fixed.inset-0.bg-black\\/50');
-                    if (modal) {
-                        modal.remove();
-                    } else if (elements.searchInput?.value) {
-                        clearSearch();
-                    }
-                    break;
-                case '1':
-                case '2':
-                case '3':
-                case '4':
-                    if (e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        const filterTypes = ['all', 'common', 'majority', 'popular'];
-                        const filterIndex = parseInt(e.key) - 1;
-                        if (filterTypes[filterIndex]) {
-                            setQuickFilter(filterTypes[filterIndex]);
-                        }
-                    }
-                    break;
-            }
-        }
-
-        // 改進的通知系統
-        function showNotification(message, type = 'info') {
-            try {
-                const existingNotification = document.querySelector('.notification');
-                if (existingNotification) {
-                    existingNotification.remove();
-                }
-                
-                const notification = document.createElement('div');
-                notification.className = `notification fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 max-w-sm ${
-                    type === 'error' ? 'bg-red-600' : 
-                    type === 'success' ? 'bg-green-600' : 
-                    type === 'warning' ? 'bg-yellow-600' :
-                    'bg-blue-600'
-                } text-white`;
-                
-                const icon = type === 'error' ? '❌' : 
-                           type === 'success' ? '✅' : 
-                           type === 'warning' ? '⚠️' : 'ℹ️';
-                
-                notification.innerHTML = `
-                    <div class="flex items-start space-x-2">
-                        <span class="flex-shrink-0">${icon}</span>
-                        <div class="flex-1 text-sm">${escapeHtml(message)}</div>
-                        <button class="text-white/80 hover:text-white flex-shrink-0" onclick="this.parentElement.parentElement.remove()">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                            </svg>
-                        </button>
-                    </div>
-                `;
-                
-                document.body.appendChild(notification);
-                
-                if (type !== 'error') {
-                    setTimeout(() => {
-                        if (notification.parentElement) {
-                            notification.style.transform = 'translateX(100%)';
-                            setTimeout(() => {
-                                if (notification.parentElement) {
-                                    notification.remove();
-                                }
-                            }, 300);
-                        }
-                    }, type === 'warning' ? 5000 : 3000);
-                }
-            } catch (error) {
-                console.error('顯示通知失敗:', error);
-            }
-        }
-
-        // 防抖函數
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
+        function addUserToLocalList(userData) {
+            const userForList = {
+                id: userData.steam_id || userData.id,
+                name: userData.username || userData.name,
+                avatar: userData.avatar_url || userData.avatar,
+                gameCount: userData.game_count || userData.gameCount || 0,
+                isShared: userData.is_shared || userData.isShared || false,
+                discordId: userData.discord_id || userData.discordId
             };
-        }
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Steam 共通遊戲發現平台</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        .glass-effect {
-            background: rgba(30, 41, 59, 0.8);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-        }
-        
-        .game-card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-        }
-        
-        .game-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        }
-        
-        .skeleton {
-            background: linear-gradient(90deg, #334155 25%, #475569 50%, #334155 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
-        }
-        
-        @keyframes loading {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .user-avatar {
-            transition: all 0.2s ease;
-        }
-        
-        .user-avatar:hover {
-            transform: scale(1.1);
-        }
-        
-        .filter-tag {
-            transition: all 0.2s ease;
-        }
-        
-        .filter-tag.active {
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            color: white;
-        }
-
-        .notification {
-            z-index: 9999;
-        }
-
-        .line-clamp-2 {
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
-        .error-indicator {
-            position: relative;
-        }
-
-        .error-indicator::after {
-            content: '⚠️';
-            position: absolute;
-            top: -8px;
-            right: -8px;
-            background: #ef4444;
-            color: white;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-        }
-    </style>
-</head>
-<body class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 min-h-screen text-white">
-    <!-- 導航欄 -->
-    <nav class="glass-effect border-b border-slate-600/30 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center space-x-3">
-                    <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                    <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                        Steam 共通遊戲發現
-                    </h1>
-                </div>
-                
-                <div class="flex items-center space-x-4">
-                    <!-- 系統狀態指示器 -->
-                    <div id="systemStatus" class="flex items-center space-x-2">
-                        <div id="dbStatus" class="w-3 h-3 rounded-full bg-gray-500" title="資料庫狀態"></div>
-                        <div id="apiStatus" class="w-3 h-3 rounded-full bg-gray-500" title="API狀態"></div>
-                    </div>
-                    
-                    <div id="userInfo" class="hidden items-center space-x-3">
-                        <img id="userAvatar" class="w-8 h-8 rounded-full border-2 border-blue-400" alt="用戶頭像">
-                        <span id="userName" class="text-sm font-medium"></span>
-                    </div>
-                    <button id="helpBtn" class="text-slate-400 hover:text-white transition-colors" title="快捷鍵說明">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </button>
-                    <button id="loginBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                        Discord 登入
-                    </button>
-                    <button id="logoutBtn" class="hidden bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                        登出
-                    </button>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <!-- 用戶選擇面板 -->
-        <div id="userPanel" class="glass-effect rounded-xl p-6 mb-8">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <h2 class="text-lg font-semibold mb-4 sm:mb-0">選擇用戶來比較遊戲庫</h2>
-                <div class="flex space-x-2">
-                    <button id="selectAllBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors">
-                        全選
-                    </button>
-                    <button id="deselectAllBtn" class="bg-gray-600 hover:bg-gray-700 px-3 py-1 rounded text-sm transition-colors">
-                        取消全選
-                    </button>
-                    <button id="retryFailedBtn" class="hidden bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded text-sm transition-colors">
-                        重試失敗用戶
-                    </button>
-                </div>
-            </div>
             
-            <div id="userList" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <!-- 用戶卡片會動態載入 -->
-            </div>
-        </div>
-
-        <!-- 篩選和統計面板 -->
-        <div class="glass-effect rounded-xl p-6 mb-8">
-            <div class="flex flex-col lg:flex-row gap-6">
-                <!-- 篩選選項 -->
-                <div class="flex-1">
-                    <h3 class="text-sm font-medium text-slate-300 mb-3">篩選遊戲</h3>
-                    <div class="flex flex-wrap gap-2">
-                        <button class="filter-tag active px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="all">
-                            全部遊戲
-                        </button>
-                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="common">
-                            共同遊戲
-                        </button>
-                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="majority">
-                            多數人擁有 (≥50%)
-                        </button>
-                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="popular">
-                            熱門 (≥75%)
-                        </button>
-                        <button class="filter-tag px-3 py-1 rounded-full text-sm bg-slate-700 hover:bg-slate-600 transition-colors" data-filter="highPlaytime">
-                            高遊戲時間
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- 排序選項 -->
-                <div class="flex-1">
-                    <h3 class="text-sm font-medium text-slate-300 mb-3">排序方式</h3>
-                    <select id="sortSelect" class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm w-full lg:w-auto focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
-                        <option value="commonality">按共通度排序</option>
-                        <option value="name">按名稱排序 (A-Z)</option>
-                        <option value="playtime">按遊戲時間排序</option>
-                        <option value="appid">按遊戲ID排序</option>
-                    </select>
-                </div>
-                
-                <!-- 搜尋框 -->
-                <div class="flex-1">
-                    <h3 class="text-sm font-medium text-slate-300 mb-3">搜尋遊戲</h3>
-                    <div class="relative">
-                        <input id="searchInput" type="text" placeholder="輸入遊戲名稱..." 
-                               class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 pr-10 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
-                        <button id="clearSearch" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors hidden">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
+            // 檢查是否已存在
+            const existingIndex = allUsers.findIndex(u => u.id === userForList.id);
+            if (existingIndex !== -1) {
+                allUsers[existingIndex] = userForList;
+            } else {
+                allUsers.push(userForList);
+            }
             
-            <!-- 統計資訊 -->
-            <div id="statsPanel" class="mt-6 pt-6 border-t border-slate-600/30">
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                    <div class="text-center">
-                        <div id="totalGames" class="text-2xl font-bold text-blue-400">0</div>
-                        <div class="text-sm text-slate-400">總遊戲數</div>
-                    </div>
-                    <div class="text-center">
-                        <div id="commonGames" class="text-2xl font-bold text-green-400">0</div>
-                        <div class="text-sm text-slate-400">共同遊戲</div>
-                    </div>
-                    <div class="text-center">
-                        <div id="selectedUsers" class="text-2xl font-bold text-purple-400">0</div>
-                        <div class="text-sm text-slate-400">已選用戶</div>
-                    </div>
-                    <div class="text-center">
-                        <div id="showingGames" class="text-2xl font-bold text-yellow-400">0</div>
-                        <div class="text-sm text-slate-400">顯示遊戲</div>
-                    </div>
-                </div>
-                
-                <!-- 快速操作面板 -->
-                <div class="flex flex-wrap gap-2 justify-center">
-                    <button id="quickCommonBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full text-sm transition-colors">
-                        只看共同遊戲
-                    </button>
-                    <button id="quickPopularBtn" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded-full text-sm transition-colors">
-                        只看熱門遊戲
-                    </button>
-                    <button id="quickResetBtn" class="bg-gray-600 hover:bg-gray-700 px-3 py-1 rounded-full text-sm transition-colors">
-                        重置篩選
-                    </button>
-                    <button id="clearCacheBtn" class="bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded-full text-sm transition-colors">
-                        清除緩存
-                    </button>
-                    <button id="reloadBtn" class="bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded-full text-sm transition-colors">
-                        重新載入
-                    </button>
-                    <button id="exportBtn" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-full text-sm transition-colors">
-                        導出清單
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 載入狀態 -->
-        <div id="loadingState" class="hidden">
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                <div class="skeleton rounded-xl aspect-[3/4] w-full"></div>
-                <div class="skeleton rounded-xl aspect-[3/4] w-full"></div>
-                <div class="skeleton rounded-xl aspect-[3/4] w-full"></div>
-                <div class="skeleton rounded-xl aspect-[3/4] w-full"></div>
-                <div class="skeleton rounded-xl aspect-[3/4] w-full"></div>
-                <div class="skeleton rounded-xl aspect-[3/4] w-full"></div>
-            </div>
-        </div>
-
-        <!-- 遊戲網格 -->
-        <div id="gamesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            <!-- 遊戲卡片會動態載入 -->
-        </div>
-
-        <!-- 空狀態 -->
-        <div id="emptyState" class="hidden text-center py-16">
-            <div class="w-16 h-16 mx-auto mb-4 bg-slate-700 rounded-full flex items-center justify-center">
-                <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-            </div>
-            <h3 class="text-lg font-medium text-slate-300 mb-2">沒有找到符合條件的遊戲</h3>
-            <p class="text-slate-400 mb-4">請選擇至少一個用戶來查看遊戲</p>
-            <div class="text-sm text-slate-500 max-w-md mx-auto">
-                <p class="mb-2">提示：如果某個用戶顯示 0 個遊戲，可能原因：</p>
-                <ul class="text-left list-disc list-inside space-y-1">
-                    <li>Steam 個人資料設為私密</li>
-                    <li>遊戲詳情未設為公開</li>
-                    <li>該帳號確實沒有任何遊戲</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // 配置
-        const SUPABASE_CONFIG = {
-            url: 'https://lwbrqtevzhfkwbwbcdtz.supabase.co',
-            anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3YnJxdGV2emhma3did2JjZHR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NjcxMjYsImV4cCI6MjA2NzA0MzEyNn0.4s16bos5EEhSuUg-K1Paf8B5UXyo-Ca8reTFZ03VVT8'
-        };
-        
-        const STEAM_CONFIG = {
-            API_KEY: '274411C2579E7E7CB7482A4BDEAB1077',
-            PROXY_URL: 'https://corsproxy.io/?',
-            STORE_BASE: 'https://store.steampowered.com/app',
-            API_BASE: 'http://api.steampowered.com'
-        };
-
-        // 共享帳號
-        const SHARED_ACCOUNTS = [
-            { id: '76561199470483407', name: '共享帳號 #1', isShared: true, gameCount: 0 },
-            { id: '76561199509330900', name: '共享帳號 #2', isShared: true, gameCount: 0 },
-            { id: '76561199509470809', name: '共享帳號 #3', isShared: true, gameCount: 0 },
-            { id: '76561199509517864', name: '共享帳號 #4', isShared: true, gameCount: 0 }
-        ];
-        
-        // 驗證 Steam ID
-        function validateSteamId(steamId) {
-            const steamIdPattern = /^[0-9]{17}$/;
-            return steamIdPattern.test(steamId);
+            console.log('已添加用戶到本地列表:', userForList);
         }
-
-        // 改進的CORS代理服務
-        const CORS_PROXIES = [
-            {
-                url: 'https://corsproxy.io/?',
-                name: 'CorsProxy.io',
-                timeout: 15000,
-                priority: 1
-            },
-            {
-                url: 'https://api.codetabs.com/v1/proxy?quest=',
-                name: 'CodeTabs',
-                timeout: 20000,
-                priority: 2
-            },
-            {
-                url: 'https://thingproxy.freeboard.io/fetch/',
-                name: 'ThingProxy',
-                timeout: 25000,
-                priority: 3
-            }
-        ];
-
-        // 全局狀態
-        let currentUser = null;
-        let allUsers = [];
-        let selectedUsers = [];
-        let failedUsers = []; // 新增：記錄載入失敗的用戶
-        let allGames = [];
-        let filteredGames = [];
-        let currentFilter = 'all';
-        let currentSort = 'commonality';
-        let supabase = null;
-        let isLoadingGames = false;
-        let gameDataCache = new Map();
-        let elements = {};
-        let authInitialized = false;
-        let systemStatus = {
-            database: 'unknown',
-            steamApi: 'unknown'
-        };
-
-        // 錯誤處理改進
-        class AppError extends Error {
-            constructor(message, type = 'general', details = null) {
-                super(message);
-                this.type = type;
-                this.details = details;
-                this.timestamp = new Date();
-            }
-        }
-
-        // 錯誤記錄器
-        const ErrorLogger = {
-            errors: [],
-            log(error) {
-                console.error(`[${error.type.toUpperCase()}] ${error.message}`, error.details);
-                this.errors.push(error);
-                this.updateUI();
-            },
-            updateUI() {
-                // 根據錯誤類型更新UI狀態指示器
-                if (this.errors.some(e => e.type === 'database')) {
-                    updateSystemStatus('database', 'error');
-                }
-                if (this.errors.some(e => e.type === 'steam-api')) {
-                    updateSystemStatus('steamApi', 'error');
-                }
-            },
-            clear() {
-                this.errors = [];
-            }
-        };
-
-        // 初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('開始初始化應用程式...');
-            
-            try {
-                initializeElements();
-                initializeSupabase();
-                setupEventListeners();
-                cleanupOAuthErrors();
-                startInitialLoad();
-                console.log('應用程式初始化完成');
-            } catch (error) {
-                ErrorLogger.log(new AppError('應用程式初始化失敗', 'initialization', error));
-                showNotification('應用程式初始化失敗', 'error');
-            }
-        });
-
-        // 初始化DOM元素
-        function initializeElements() {
-            const elementIds = [
-                'loginBtn', 'logoutBtn', 'userInfo', 'userAvatar', 'userName',
-                'userList', 'gamesGrid', 'loadingState', 'emptyState',
-                'searchInput', 'sortSelect', 'selectAllBtn', 'deselectAllBtn',
-                'totalGames', 'commonGames', 'selectedUsers', 'showingGames',
-                'dbStatus', 'apiStatus', 'retryFailedBtn'
-            ];
-
-            elements = {};
-            elementIds.forEach(id => {
-                elements[id] = document.getElementById(id);
-                if (!elements[id]) {
-                    console.warn(`找不到元素: ${id}`);
-                }
-            });
-        }
-
-        // 改進的 Supabase 初始化
-        async function initializeSupabase() {
-            try {
-                if (window.supabase && window.supabase.createClient) {
-                    supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-                    
-                    // 測試資料庫連線
-                    await testDatabaseConnection();
-                    
-                    console.log('Supabase 初始化成功');
-                    updateSystemStatus('database', 'connected');
-                } else {
-                    throw new AppError('Supabase 庫未載入', 'initialization');
-                }
-            } catch (error) {
-                ErrorLogger.log(new AppError('Supabase 初始化失敗', 'database', error));
-                updateSystemStatus('database', 'error');
-            }
-        }
-
-        // 測試資料庫連線
-        async function testDatabaseConnection() {
-            try {
-                // 嘗試一個簡單的查詢來測試連線
-                const { data, error } = await supabase
-                    .from('users')
-                    .select('id')
-                    .limit(1);
-                
-                if (error) {
-                    // 如果是RLS錯誤，仍然認為連線正常
-                    if (error.code === '42501' || error.message.includes('RLS')) {
-                        console.warn('資料庫連線正常，但RLS政策限制訪問');
-                        updateSystemStatus('database', 'warning');
-                        return;
-                    }
-                    throw error;
-                }
-                
-                updateSystemStatus('database', 'connected');
-            } catch (error) {
-                throw new AppError('資料庫連線測試失敗', 'database', error);
-            }
-        }
-
-        // 系統狀態更新
-        function updateSystemStatus(component, status) {
-            systemStatus[component] = status;
-            
-            const statusElement = elements[component === 'database' ? 'dbStatus' : 'apiStatus'];
-            if (!statusElement) return;
-            
-            statusElement.classList.remove('bg-gray-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500');
-            
-            switch (status) {
-                case 'connected':
-                    statusElement.classList.add('bg-green-500');
-                    statusElement.title = `${component === 'database' ? '資料庫' : 'API'}連線正常`;
-                    break;
-                case 'warning':
-                    statusElement.classList.add('bg-yellow-500');
-                    statusElement.title = `${component === 'database' ? '資料庫' : 'API'}有警告`;
-                    break;
-                case 'error':
-                    statusElement.classList.add('bg-red-500');
-                    statusElement.title = `${component === 'database' ? '資料庫' : 'API'}連線錯誤`;
-                    break;
-                default:
-                    statusElement.classList.add('bg-gray-500');
-                    statusElement.title = `${component === 'database' ? '資料庫' : 'API'}狀態未知`;
-            }
-        }
-
-        // 清理OAuth錯誤
-        function cleanupOAuthErrors() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('error') === 'invalid_request') {
-                console.log('清理OAuth錯誤參數');
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-        }
-
-        // 開始初始載入
-        async function startInitialLoad() {
-            try {
-                await checkAuth();
-                await loadUsers();
-                selectedUsers = [];
-                failedUsers = [];
-                updateUserInterface();
-            } catch (error) {
-                ErrorLogger.log(new AppError('初始載入失敗', 'initialization', error));
-                showNotification('載入失敗，請重新整理頁面', 'error');
-            }
-        }
-
-        // 設置事件監聽器
-        function setupEventListeners() {
-            try {
-                // 基本按鈕事件
-                if (elements.loginBtn) {
-                    elements.loginBtn.addEventListener('click', handleLogin);
-                }
-                if (elements.logoutBtn) {
-                    elements.logoutBtn.addEventListener('click', handleLogout);
-                }
-                if (elements.selectAllBtn) {
-                    elements.selectAllBtn.addEventListener('click', selectAllUsers);
-                }
-                if (elements.deselectAllBtn) {
-                    elements.deselectAllBtn.addEventListener('click', deselectAllUsers);
-                }
-                if (elements.retryFailedBtn) {
-                    elements.retryFailedBtn.addEventListener('click', retryFailedUsers);
-                }
-
-                // 幫助按鈕
-                const helpBtn = document.getElementById('helpBtn');
-                if (helpBtn) {
-                    helpBtn.addEventListener('click', showHelpModal);
-                }
-
-                // 搜尋和排序
-                if (elements.searchInput) {
-                    elements.searchInput.addEventListener('input', debounce(handleSearchInput, 300));
-                }
-                if (elements.sortSelect) {
-                    elements.sortSelect.addEventListener('change', function(e) {
-                        currentSort = e.target.value;
-                        sortGames();
-                    });
-                }
-
-                // 清除搜尋
-                const clearSearchBtn = document.getElementById('clearSearch');
-                if (clearSearchBtn) {
-                    clearSearchBtn.addEventListener('click', clearSearch);
-                }
-
-                // 快速操作按鈕
-                const quickCommonBtn = document.getElementById('quickCommonBtn');
-                const quickPopularBtn = document.getElementById('quickPopularBtn');
-                const quickResetBtn = document.getElementById('quickResetBtn');
-                const clearCacheBtn = document.getElementById('clearCacheBtn');
-                const reloadBtn = document.getElementById('reloadBtn');
-                const exportBtn = document.getElementById('exportBtn');
-
-                if (quickCommonBtn) {
-                    quickCommonBtn.addEventListener('click', () => setQuickFilter('common'));
-                }
-                if (quickPopularBtn) {
-                    quickPopularBtn.addEventListener('click', () => setQuickFilter('popular'));
-                }
-                if (quickResetBtn) {
-                    quickResetBtn.addEventListener('click', resetAllFilters);
-                }
-                if (clearCacheBtn) {
-                    clearCacheBtn.addEventListener('click', clearGameDataCache);
-                }
-                if (reloadBtn) {
-                    reloadBtn.addEventListener('click', () => reloadGameData(true));
-                }
-                if (exportBtn) {
-                    exportBtn.addEventListener('click', exportGameList);
-                }
-
-                // 篩選按鈕
-                document.querySelectorAll('.filter-tag').forEach(btn => {
-                    btn.addEventListener('click', function(e) {
-                        document.querySelectorAll('.filter-tag').forEach(b => b.classList.remove('active'));
-                        e.target.classList.add('active');
-                        currentFilter = e.target.dataset.filter;
-                        filterGames();
-                    });
-                });
-
-                // 鍵盤快捷鍵
-                document.addEventListener('keydown', handleKeyboardShortcuts);
-
-                // Supabase 認證狀態監聽
-                if (supabase && !authInitialized) {
-                    authInitialized = true;
-                    let lastEvent = null;
-                    
-                    supabase.auth.onAuthStateChange((event, session) => {
-                        if (event === lastEvent && event === 'SIGNED_IN') {
-                            return;
-                        }
-                        
-                        lastEvent = event;
-                        console.log('認證狀態變化:', event);
-                        
-                        if (event === 'SIGNED_IN' && session) {
-                            currentUser = session.user;
-                            updateAuthInterface(true);
-                            loadUsers();
-                            showNotification('登入成功！', 'success');
-                        } else if (event === 'SIGNED_OUT') {
-                            currentUser = null;
-                            updateAuthInterface(false);
-                            selectedUsers = [];
-                            failedUsers = [];
-                            gameDataCache.clear();
-                            loadUsers();
-                        }
-                    });
-                }
-
-                console.log('事件監聽器設置完成');
-            } catch (error) {
-                ErrorLogger.log(new AppError('設置事件監聽器失敗', 'initialization', error));
-            }
-        }
-
-        // 認證檢查
         async function checkAuth() {
             try {
                 if (!supabase) return;
@@ -3008,47 +1366,72 @@
         // 載入用戶
         async function loadUsers() {
             try {
+                // 重置共享帳號的遊戲數量
                 SHARED_ACCOUNTS.forEach(account => {
                     account.gameCount = 0;
-                    account.hasError = false;
                 });
                 
                 allUsers = [...SHARED_ACCOUNTS];
                 
                 if (currentUser && supabase) {
                     try {
+                        // 載入所有Discord群組用戶（包括當前用戶）
                         const { data: users, error } = await supabase
                             .from('users')
                             .select('*')
-                            .neq('is_shared', true);
+                            .eq('is_shared', false)
+                            .order('username');
                         
                         if (error) {
-                            // 處理RLS錯誤但不影響功能
                             if (error.code === '42501' || error.message.includes('RLS')) {
-                                console.warn('RLS政策限制，使用共享帳號模式');
+                                console.warn('RLS政策限制，僅顯示共享帳號');
                                 updateSystemStatus('database', 'warning');
+                                
+                                // 如果當前用戶有Steam ID但不在資料庫中，添加到本地
+                                if (currentUser.user_metadata?.steam_id) {
+                                    addUserToLocalList({
+                                        id: currentUser.user_metadata.steam_id,
+                                        name: currentUser.user_metadata.full_name || 'You',
+                                        avatar: currentUser.user_metadata.avatar_url,
+                                        gameCount: 0,
+                                        isShared: false,
+                                        discordId: currentUser.id
+                                    });
+                                }
                             } else {
                                 throw error;
                             }
-                        } else if (users) {
+                        } else if (users && users.length > 0) {
                             const mappedUsers = users.map(user => ({
                                 id: user.steam_id,
                                 name: user.username,
                                 avatar: user.avatar_url,
                                 gameCount: user.game_count || 0,
+                                totalPlaytime: user.total_playtime || 0,
                                 isShared: false,
-                                hasError: false
+                                discordId: user.discord_id,
+                                steamProfileUrl: user.steam_profile_url,
+                                isCurrentUser: user.discord_id === currentUser.id
                             }));
                             allUsers = [...allUsers, ...mappedUsers];
+                            updateSystemStatus('database', 'connected');
                         }
                     } catch (dbError) {
-                        ErrorLogger.log(new AppError('載入資料庫用戶失敗', 'database', dbError));
-                        console.warn('無法載入資料庫用戶，僅使用共享帳號');
+                        ErrorLogger.log(new AppError('載入Discord群組用戶失敗', 'database', dbError));
+                        console.warn('無法載入Discord群組用戶，僅使用共享帳號');
+                        updateSystemStatus('database', 'error');
                     }
                 }
                 
                 updateUserInterface();
                 console.log('用戶載入完成，總用戶數:', allUsers.length);
+                
+                // 顯示群組統計
+                const discordUsers = allUsers.filter(u => !u.isShared);
+                if (discordUsers.length > 0) {
+                    showNotification(`已載入 ${discordUsers.length} 個Discord群組成員`, 'success');
+                }
+                
             } catch (error) {
                 ErrorLogger.log(new AppError('載入用戶失敗', 'general', error));
                 showNotification('載入用戶資料失敗', 'error');
@@ -3075,6 +1458,12 @@
                     } else {
                         elements.retryFailedBtn.classList.add('hidden');
                     }
+                }
+                
+                // 更新管理Steam連結按鈕
+                const manageSteamBtn = document.getElementById('manageSteamBtn');
+                if (manageSteamBtn && currentUser) {
+                    manageSteamBtn.classList.remove('hidden');
                 }
                 
                 updateStats();
@@ -3104,6 +1493,7 @@
                              class="user-avatar w-12 h-12 rounded-full border-2 ${isSelected ? 'border-blue-400' : 'border-slate-500'}" 
                              alt="${escapeHtml(user.name)}"
                              onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=475569&color=ffffff'">
+                        
                         ${isSelected ? `
                             <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
                                 <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -3111,6 +1501,7 @@
                                 </svg>
                             </div>
                         ` : ''}
+                        
                         ${hasFailed ? `
                             <div class="absolute -top-1 -left-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
                                 <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -3119,19 +1510,121 @@
                                 </svg>
                             </div>
                         ` : ''}
+                        
+                        ${user.isCurrentUser ? `
+                            <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
+                                <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                        ` : ''}
                     </div>
+                    
                     <div class="text-center">
-                        <div class="text-sm font-medium truncate max-w-20" title="${escapeHtml(user.name)}">${escapeHtml(user.name)}</div>
+                        <div class="text-sm font-medium truncate max-w-20" title="${escapeHtml(user.name)}">
+                            ${escapeHtml(user.name)}
+                            ${user.isCurrentUser ? ' (你)' : ''}
+                        </div>
+                        
                         ${user.gameCount > 0 ? `<div class="text-xs text-slate-400">${user.gameCount} 遊戲</div>` : ''}
-                        ${user.isShared ? '<div class="text-xs text-blue-400">共享</div>' : ''}
-                        ${hasFailed ? '<div class="text-xs text-red-400">載入失敗</div>' : ''}
+                        
+                        <div class="flex flex-wrap justify-center gap-1 mt-1">
+                            ${user.isShared ? '<span class="inline-block px-1 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">共享</span>' : ''}
+                            ${!user.isShared ? '<span class="inline-block px-1 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">Discord</span>' : ''}
+                            ${hasFailed ? '<span class="inline-block px-1 py-0.5 bg-red-500/20 text-red-400 text-xs rounded">錯誤</span>' : ''}
+                        </div>
+                        
+                        ${user.totalPlaytime > 0 ? `
+                            <div class="text-xs text-slate-500 mt-1">${Math.round(user.totalPlaytime / 60)}h 總遊戲時間</div>
+                        ` : ''}
                     </div>
                 </div>
             `;
             
             card.addEventListener('click', () => toggleUser(user));
             
+            // 如果是Discord用戶且有Steam Profile URL，添加右鍵菜單
+            if (!user.isShared && user.steamProfileUrl) {
+                card.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    showUserContextMenu(e, user);
+                });
+            }
+            
             return card;
+        }
+
+        // 顯示用戶右鍵選單
+        function showUserContextMenu(e, user) {
+            // 移除現有的選單
+            const existingMenu = document.querySelector('.user-context-menu');
+            if (existingMenu) {
+                existingMenu.remove();
+            }
+            
+            const menu = document.createElement('div');
+            menu.className = 'user-context-menu fixed glass-effect rounded-lg border border-slate-600 py-2 z-50';
+            menu.style.left = `${e.pageX}px`;
+            menu.style.top = `${e.pageY}px`;
+            
+            menu.innerHTML = `
+                <div class="px-3 py-2 text-sm text-slate-300 border-b border-slate-600 font-medium">
+                    ${escapeHtml(user.name)}
+                </div>
+                <button class="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-600/50 transition-colors" data-action="steam-profile">
+                    <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5z" clip-rule="evenodd"/>
+                        <path fill-rule="evenodd" d="M7.414 15.414a2 2 0 01-2.828-2.828l3-3a2 2 0 012.828 0 1 1 0 001.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 00-1.414-1.414l-1.5 1.5z" clip-rule="evenodd"/>
+                    </svg>
+                    查看Steam個人資料
+                </button>
+                ${user.discordId === currentUser?.id ? `
+                    <button class="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-600/50 transition-colors" data-action="update-steam">
+                        <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                        </svg>
+                        更新Steam連結
+                    </button>
+                ` : ''}
+            `;
+            
+            // 處理選單點擊
+            menu.addEventListener('click', (e) => {
+                const action = e.target.closest('[data-action]')?.dataset.action;
+                
+                switch (action) {
+                    case 'steam-profile':
+                        if (user.steamProfileUrl) {
+                            window.open(user.steamProfileUrl, '_blank');
+                        }
+                        break;
+                    case 'update-steam':
+                        showSteamLinkModal();
+                        break;
+                }
+                
+                menu.remove();
+            });
+            
+            // 點擊其他地方關閉選單
+            const closeMenu = (e) => {
+                if (!menu.contains(e.target)) {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu);
+                }
+            };
+            
+            document.addEventListener('click', closeMenu);
+            document.body.appendChild(menu);
+            
+            // 確保選單不會超出視窗邊界
+            const rect = menu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                menu.style.left = `${e.pageX - rect.width}px`;
+            }
+            if (rect.bottom > window.innerHeight) {
+                menu.style.top = `${e.pageY - rect.height}px`;
+            }
         }
 
         // 切換用戶選擇
@@ -4396,7 +2889,19 @@
                                 <div class="space-y-2 text-sm text-slate-400">
                                     <div>• 左鍵點擊遊戲卡片：打開Steam商店頁面</div>
                                     <div>• 右鍵點擊遊戲卡片：顯示遊戲詳細資訊</div>
-                                    <div>• 懸停在遊戲卡片上：顯示額外資訊</div>
+                                    <div>• 右鍵點擊Discord用戶：查看Steam個人資料/更新連結</div>
+                                    <div>• 懸停在卡片上：顯示額外資訊</div>
+                                </div>
+                            </div>
+                            
+                            <div class="border-t border-slate-600/30 pt-4">
+                                <h3 class="text-sm font-medium text-slate-300 mb-2">Discord群組功能</h3>
+                                <div class="space-y-2 text-sm text-slate-400">
+                                    <div>• 🟣 Discord標籤：群組成員</div>
+                                    <div>• 🔵 共享標籤：測試帳號</div>
+                                    <div>• 🟢 選中狀態：已選擇比較</div>
+                                    <div>• 🔴 錯誤狀態：載入失敗</div>
+                                    <div>• 👤 個人標記：你的帳號</div>
                                 </div>
                             </div>
                             
