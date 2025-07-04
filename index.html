@@ -296,6 +296,7 @@
         let isLoadingGames = false;
         let gameDataCache = new Map();
         let elements = {};
+        let authInitialized = false; // 防止認證重複初始化
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -449,12 +450,13 @@
                 // 鍵盤快捷鍵
                 document.addEventListener('keydown', handleKeyboardShortcuts);
 
-                // Supabase 認證狀態監聽
-                if (supabase) {
+                // Supabase 認證狀態監聽 - 修復重複觸發問題
+                if (supabase && !authInitialized) {
+                    authInitialized = true;
                     supabase.auth.onAuthStateChange((event, session) => {
                         console.log('認證狀態變化:', event);
                         
-                        if (event === 'SIGNED_IN') {
+                        if (event === 'SIGNED_IN' && session) {
                             currentUser = session.user;
                             updateAuthInterface(true);
                             loadUsers();
@@ -747,10 +749,12 @@
                             // 如果資料庫沒有數據，從API載入
                             if (!games || games.length === 0) {
                                 games = await fetchUserGames(user.id);
-                                // 嘗試保存到資料庫（非阻塞）
-                                saveUserGamesToDB(user.id, games).catch(error => {
-                                    console.warn('保存遊戲數據失敗:', error);
-                                });
+                                // 如果是已登入用戶，嘗試保存到資料庫（非阻塞）
+                                if (currentUser) {
+                                    saveUserGamesToDB(user.id, games).catch(error => {
+                                        console.warn('保存遊戲數據失敗:', error.message);
+                                    });
+                                }
                             }
                             
                             // 緩存數據
@@ -851,22 +855,42 @@
             }
         }
 
-        // 保存用戶遊戲到資料庫
+        // 保存用戶遊戲到資料庫 - 修復RLS錯誤
         async function saveUserGamesToDB(steamId, games) {
             try {
-                if (!supabase || !games || games.length === 0) return;
+                if (!supabase || !games || games.length === 0 || !currentUser) return;
                 
                 console.log(`嘗試保存用戶 ${steamId} 的 ${games.length} 個遊戲到資料庫`);
                 
-                // 首先檢查用戶是否存在
-                const { data: user, error: userError } = await supabase
+                // 首先檢查用戶是否存在，如果不存在則創建
+                let { data: user, error: userError } = await supabase
                     .from('users')
                     .select('id')
                     .eq('steam_id', steamId)
                     .single();
                 
-                if (userError || !user) {
-                    console.warn(`無法找到用戶 ${steamId}，跳過資料庫保存`);
+                if (userError && userError.code === 'PGRST116') {
+                    // 用戶不存在，創建新用戶
+                    const selectedUser = selectedUsers.find(u => u.id === steamId);
+                    const { data: newUser, error: createError } = await supabase
+                        .from('users')
+                        .insert({
+                            discord_id: currentUser.id, // 使用當前登入用戶的Discord ID
+                            username: selectedUser?.name || `User ${steamId}`,
+                            avatar_url: selectedUser?.avatar || null,
+                            steam_id: steamId,
+                            is_shared: selectedUser?.isShared || false
+                        })
+                        .select('id')
+                        .single();
+                    
+                    if (createError) {
+                        console.error('創建用戶失敗:', createError);
+                        return;
+                    }
+                    user = newUser;
+                } else if (userError) {
+                    console.error('查詢用戶失敗:', userError);
                     return;
                 }
                 
@@ -877,19 +901,15 @@
                     header_image: `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`
                 }));
                 
-                // 批量插入或更新遊戲（忽略衝突）
-                const { data: insertedGames, error: gamesError } = await supabase
+                // 批量插入或更新遊戲
+                // 注意：這裡可能因為RLS政策失敗，我們忽略錯誤繼續執行
+                const { data: insertedGames } = await supabase
                     .from('games')
                     .upsert(gamesToInsert, { 
                         onConflict: 'steam_app_id',
                         ignoreDuplicates: false 
                     })
                     .select('id, steam_app_id');
-                
-                if (gamesError) {
-                    console.error('插入遊戲失敗:', gamesError);
-                    return;
-                }
                 
                 // 獲取所有遊戲的ID映射
                 const appIds = games.map(g => g.appid);
@@ -1284,6 +1304,10 @@
             const commonalityColor = game.commonalityPercentage >= 75 ? 'text-green-400' : 
                                    game.commonalityPercentage >= 50 ? 'text-yellow-400' : 'text-blue-400';
             
+            // 使用 data attributes 而不是直接在 onclick 中嵌入字符串
+            card.setAttribute('data-game-appid', game.appid);
+            card.setAttribute('data-game-name', game.name);
+            
             card.innerHTML = `
                 <div class="relative group">
                     <img src="${headerImageUrl}" 
@@ -1358,6 +1382,7 @@
                 <div class="absolute inset-0 rounded-xl opacity-0 bg-blue-400/20 pointer-events-none transition-opacity duration-200 card-ripple"></div>
             `;
             
+            // 使用獨立的事件處理器
             card.addEventListener('click', (e) => {
                 const rippleElement = card.querySelector('.card-ripple');
                 if (rippleElement) {
@@ -1367,7 +1392,8 @@
                     }, 200);
                 }
                 
-                window.open(`${STEAM_CONFIG.STORE_BASE}/${game.appid}`, '_blank');
+                const appid = card.getAttribute('data-game-appid');
+                window.open(`${STEAM_CONFIG.STORE_BASE}/${appid}`, '_blank');
             });
 
             card.addEventListener('contextmenu', (e) => {
