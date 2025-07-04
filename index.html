@@ -156,6 +156,13 @@
                         </svg>
                         測試Steam URL
                     </button>
+                    <button id="cleanDuplicatesBtn" class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm transition-colors">
+                        <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clip-rule="evenodd"/>
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        清理重複
+                    </button>
                     <button id="selectAllBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors">
                         全選
                     </button>
@@ -535,7 +542,7 @@
                 'userList', 'gamesGrid', 'loadingState', 'emptyState',
                 'searchInput', 'sortSelect', 'selectAllBtn', 'deselectAllBtn',
                 'totalGames', 'commonGames', 'selectedUsers', 'showingGames',
-                'dbStatus', 'apiStatus', 'retryFailedBtn', 'manageSteamBtn', 'testSteamBtn'
+                'dbStatus', 'apiStatus', 'retryFailedBtn', 'manageSteamBtn', 'testSteamBtn', 'cleanDuplicatesBtn'
             ];
 
             elements = {};
@@ -674,6 +681,12 @@
                 if (testSteamBtn) {
                     testSteamBtn.addEventListener('click', showSteamTestModal);
                 }
+                
+                // 清理重複用戶按鈕
+                const cleanDuplicatesBtn = document.getElementById('cleanDuplicatesBtn');
+                if (cleanDuplicatesBtn) {
+                    cleanDuplicatesBtn.addEventListener('click', cleanDuplicateUsers);
+                }
 
                 // 幫助按鈕
                 const helpBtn = document.getElementById('helpBtn');
@@ -742,35 +755,51 @@
                 if (supabase && !authInitialized) {
                     authInitialized = true;
                     let lastEvent = null;
+                    let isProcessingAuth = false; // 防止重複處理
                     
                     supabase.auth.onAuthStateChange(async (event, session) => {
+                        // 防止重複的事件處理
                         if (event === lastEvent && event === 'SIGNED_IN') {
+                            console.log('跳過重複的認證事件:', event);
+                            return;
+                        }
+                        
+                        if (isProcessingAuth) {
+                            console.log('正在處理認證事件，跳過:', event);
                             return;
                         }
                         
                         lastEvent = event;
+                        isProcessingAuth = true;
                         console.log('認證狀態變化:', event);
                         
-                        if (event === 'SIGNED_IN' && session) {
-                            currentUser = session.user;
-                            updateAuthInterface(true);
-                            
-                            // 檢查用戶是否已設置Steam ID
-                            const hasExistingSteamId = await checkUserSteamId(currentUser.id);
-                            if (!hasExistingSteamId) {
-                                // 顯示Steam連結輸入彈窗
-                                showSteamLinkModal();
-                            } else {
-                                loadUsers();
-                                showNotification('歡迎回來！', 'success');
+                        try {
+                            if (event === 'SIGNED_IN' && session) {
+                                currentUser = session.user;
+                                updateAuthInterface(true);
+                                
+                                // 檢查用戶是否已設置Steam ID
+                                const hasExistingSteamId = await checkUserSteamId(currentUser.id);
+                                if (!hasExistingSteamId) {
+                                    // 顯示Steam連結輸入彈窗
+                                    showSteamLinkModal();
+                                } else {
+                                    await loadUsers(); // 只在這裡載入一次
+                                    showNotification('歡迎回來！', 'success');
+                                }
+                            } else if (event === 'SIGNED_OUT') {
+                                currentUser = null;
+                                updateAuthInterface(false);
+                                selectedUsers = [];
+                                failedUsers = [];
+                                gameDataCache.clear();
+                                await loadUsers(); // 重置為共享帳號模式
                             }
-                        } else if (event === 'SIGNED_OUT') {
-                            currentUser = null;
-                            updateAuthInterface(false);
-                            selectedUsers = [];
-                            failedUsers = [];
-                            gameDataCache.clear();
-                            loadUsers();
+                        } catch (error) {
+                            console.error('處理認證狀態變化時發生錯誤:', error);
+                            ErrorLogger.log(new AppError('認證狀態處理失敗', 'auth', error));
+                        } finally {
+                            isProcessingAuth = false;
                         }
                     });
                 }
@@ -935,7 +964,10 @@
                     
                     document.body.removeChild(modal);
                     showNotification('Steam帳號連結成功！正在載入遊戲資料...', 'success');
-                    loadUsers();
+                    
+                    // 重新載入用戶列表（確保不重複）
+                    await loadUsers();
+                    
                 } catch (error) {
                     showError(error.message);
                     ErrorLogger.log(error);
@@ -945,10 +977,12 @@
             });
             
             // 跳過按鈕
-            skipBtn.addEventListener('click', () => {
+            skipBtn.addEventListener('click', async () => {
                 document.body.removeChild(modal);
                 showNotification('你可以稍後在設定中連結Steam帳號', 'info');
-                loadUsers();
+                
+                // 即使跳過也要載入用戶列表
+                await loadUsers();
             });
             
             // Enter鍵確認
@@ -1101,7 +1135,7 @@
             }
         }
 
-        // 添加用戶到本地列表
+        // 添加用戶到本地列表（改進去重邏輯）
         function addUserToLocalList(userData) {
             const userForList = {
                 id: userData.steam_id || userData.id,
@@ -1115,15 +1149,34 @@
                 isCurrentUser: userData.discord_id === currentUser?.id || userData.discordId === currentUser?.id
             };
             
-            // 檢查是否已存在
-            const existingIndex = allUsers.findIndex(u => u.id === userForList.id);
+            // 檢查是否已存在（改進檢查邏輯）
+            const existingIndex = allUsers.findIndex(u => 
+                u.id === userForList.id || 
+                (u.discordId && u.discordId === userForList.discordId)
+            );
+            
             if (existingIndex !== -1) {
-                allUsers[existingIndex] = userForList;
-                console.log('已更新本地用戶:', userForList);
+                // 更新現有用戶，合併更完整的信息
+                const existing = allUsers[existingIndex];
+                allUsers[existingIndex] = {
+                    ...existing,
+                    ...userForList,
+                    // 保留更大的值
+                    gameCount: Math.max(existing.gameCount || 0, userForList.gameCount || 0),
+                    totalPlaytime: Math.max(existing.totalPlaytime || 0, userForList.totalPlaytime || 0),
+                    // 保留更完整的信息
+                    steamProfileUrl: userForList.steamProfileUrl || existing.steamProfileUrl,
+                    avatar: userForList.avatar || existing.avatar
+                };
+                console.log('已更新本地用戶:', allUsers[existingIndex]);
             } else {
+                // 不存在才添加
                 allUsers.push(userForList);
-                console.log('已添加用戶到本地列表:', userForList);
+                console.log('已添加新用戶到本地列表:', userForList);
             }
+            
+            // 添加後進行一次去重檢查
+            allUsers = removeDuplicateUsers(allUsers);
         }
         function showSteamTestModal() {
             const modal = document.createElement('div');
@@ -1371,6 +1424,7 @@
                     account.gameCount = 0;
                 });
                 
+                // 重新初始化用戶列表，只包含共享帳號
                 allUsers = [...SHARED_ACCOUNTS];
                 
                 if (currentUser && supabase) {
@@ -1389,31 +1443,50 @@
                                 
                                 // 如果當前用戶有Steam ID但不在資料庫中，添加到本地
                                 if (currentUser.user_metadata?.steam_id) {
-                                    addUserToLocalList({
+                                    const currentUserData = {
                                         id: currentUser.user_metadata.steam_id,
                                         name: currentUser.user_metadata.full_name || 'You',
                                         avatar: currentUser.user_metadata.avatar_url,
                                         gameCount: 0,
                                         isShared: false,
-                                        discordId: currentUser.id
-                                    });
+                                        discordId: currentUser.id,
+                                        isCurrentUser: true
+                                    };
+                                    addUserToLocalList(currentUserData);
                                 }
                             } else {
                                 throw error;
                             }
                         } else if (users && users.length > 0) {
-                            const mappedUsers = users.map(user => ({
-                                id: user.steam_id,
-                                name: user.username,
-                                avatar: user.avatar_url,
-                                gameCount: user.game_count || 0,
-                                totalPlaytime: user.total_playtime || 0,
-                                isShared: false,
-                                discordId: user.discord_id,
-                                steamProfileUrl: user.steam_profile_url,
-                                isCurrentUser: user.discord_id === currentUser.id
-                            }));
-                            allUsers = [...allUsers, ...mappedUsers];
+                            console.log(`從資料庫載入 ${users.length} 個Discord用戶`);
+                            
+                            // 去重：使用 Map 來確保每個 steam_id 只出現一次
+                            const userMap = new Map();
+                            
+                            users.forEach(user => {
+                                if (user.steam_id && user.steam_id.trim() !== '') {
+                                    const mappedUser = {
+                                        id: user.steam_id,
+                                        name: user.username,
+                                        avatar: user.avatar_url,
+                                        gameCount: user.game_count || 0,
+                                        totalPlaytime: user.total_playtime || 0,
+                                        isShared: false,
+                                        discordId: user.discord_id,
+                                        steamProfileUrl: user.steam_profile_url,
+                                        isCurrentUser: user.discord_id === currentUser.id
+                                    };
+                                    
+                                    // 使用 steam_id 作為 key 來去重
+                                    userMap.set(user.steam_id, mappedUser);
+                                }
+                            });
+                            
+                            // 將去重後的用戶添加到列表
+                            const deduplicatedUsers = Array.from(userMap.values());
+                            allUsers = [...allUsers, ...deduplicatedUsers];
+                            
+                            console.log(`去重後的Discord用戶數量: ${deduplicatedUsers.length}`);
                             updateSystemStatus('database', 'connected');
                         }
                     } catch (dbError) {
@@ -1422,6 +1495,9 @@
                         updateSystemStatus('database', 'error');
                     }
                 }
+                
+                // 最終去重檢查：確保 allUsers 中沒有重複的用戶
+                allUsers = removeDuplicateUsers(allUsers);
                 
                 updateUserInterface();
                 console.log('用戶載入完成，總用戶數:', allUsers.length);
@@ -1436,6 +1512,56 @@
                 ErrorLogger.log(new AppError('載入用戶失敗', 'general', error));
                 showNotification('載入用戶資料失敗', 'error');
             }
+        }
+        
+        // 手動清理重複用戶
+        function cleanDuplicateUsers() {
+            const originalCount = allUsers.length;
+            allUsers = removeDuplicateUsers(allUsers);
+            const newCount = allUsers.length;
+            const removedCount = originalCount - newCount;
+            
+            updateUserInterface();
+            
+            if (removedCount > 0) {
+                showNotification(`成功清理 ${removedCount} 個重複用戶`, 'success');
+            } else {
+                showNotification('沒有發現重複用戶', 'info');
+            }
+            
+            console.log(`清理重複用戶: ${originalCount} -> ${newCount} (移除 ${removedCount} 個)`);
+        }
+        function removeDuplicateUsers(users) {
+            const userMap = new Map();
+            const duplicates = [];
+            
+            users.forEach(user => {
+                if (userMap.has(user.id)) {
+                    duplicates.push(user.id);
+                    console.warn(`發現重複用戶: ${user.name} (${user.id})`);
+                    
+                    // 保留更完整的用戶資料（有更多信息的那個）
+                    const existing = userMap.get(user.id);
+                    const current = user;
+                    
+                    // 比較並選擇更完整的用戶資料
+                    if (current.gameCount > existing.gameCount || 
+                        (current.steamProfileUrl && !existing.steamProfileUrl) ||
+                        (current.totalPlaytime > existing.totalPlaytime)) {
+                        userMap.set(user.id, current);
+                        console.log(`用更完整的資料替換用戶: ${user.name}`);
+                    }
+                } else {
+                    userMap.set(user.id, user);
+                }
+            });
+            
+            if (duplicates.length > 0) {
+                console.log(`移除了 ${duplicates.length} 個重複用戶`);
+                showNotification(`已移除 ${duplicates.length} 個重複用戶`, 'info');
+            }
+            
+            return Array.from(userMap.values());
         }
 
         // 更新用戶界面
@@ -3060,22 +3186,5 @@
             };
         }
     </script>
-    </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="border-t border-slate-600/30 mt-16 py-6">
-        <div class="max-w-7xl mx-auto px-4 text-center text-sm text-slate-400">
-            <p class="mb-2">
-                遊戲群組：<a href="https://discord.gg/C9vkSAZmPT" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 transition-colors">Discord</a>
-            </p>
-            <p>
-                作者：廖天佑 Bless Liao (blessyo)
-            </p>
-        </div>
-    </footer>
-
-    <script>
-
 </body>
 </html>
