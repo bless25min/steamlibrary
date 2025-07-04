@@ -163,6 +163,12 @@
                         </svg>
                         清理重複
                     </button>
+                    <button id="forceLogoutBtn" class="bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded text-sm transition-colors">
+                        <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/>
+                        </svg>
+                        強制登出
+                    </button>
                     <button id="selectAllBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors">
                         全選
                     </button>
@@ -326,7 +332,6 @@
             </p>
         </div>
     </footer>
-
     <script>
         // 配置
         const SUPABASE_CONFIG = {
@@ -556,7 +561,7 @@
                 'userList', 'gamesGrid', 'loadingState', 'emptyState',
                 'searchInput', 'sortSelect', 'selectAllBtn', 'deselectAllBtn',
                 'totalGames', 'commonGames', 'selectedUsers', 'showingGames',
-                'dbStatus', 'apiStatus', 'retryFailedBtn', 'manageSteamBtn', 'testSteamBtn', 'cleanDuplicatesBtn'
+                'dbStatus', 'apiStatus', 'retryFailedBtn', 'manageSteamBtn', 'testSteamBtn', 'cleanDuplicatesBtn', 'forceLogoutBtn'
             ];
 
             elements = {};
@@ -667,13 +672,23 @@
         // 設置事件監聽器
         function setupEventListeners() {
             try {
+                console.log('開始設置事件監聽器...');
+                
                 // 基本按鈕事件
                 if (elements.loginBtn) {
                     elements.loginBtn.addEventListener('click', handleLogin);
+                    console.log('✅ 登入按鈕事件已綁定');
+                } else {
+                    console.warn('❌ 找不到登入按鈕元素');
                 }
+                
                 if (elements.logoutBtn) {
                     elements.logoutBtn.addEventListener('click', handleLogout);
+                    console.log('✅ 登出按鈕事件已綁定');
+                } else {
+                    console.warn('❌ 找不到登出按鈕元素');
                 }
+                
                 if (elements.selectAllBtn) {
                     elements.selectAllBtn.addEventListener('click', selectAllUsers);
                 }
@@ -700,6 +715,12 @@
                 const cleanDuplicatesBtn = document.getElementById('cleanDuplicatesBtn');
                 if (cleanDuplicatesBtn) {
                     cleanDuplicatesBtn.addEventListener('click', cleanDuplicateUsers);
+                }
+                
+                // 強制登出按鈕（備用）
+                const forceLogoutBtn = document.getElementById('forceLogoutBtn');
+                if (forceLogoutBtn) {
+                    forceLogoutBtn.addEventListener('click', forceLogout);
                 }
 
                 // 幫助按鈕
@@ -765,52 +786,68 @@
                 // 鍵盤快捷鍵
                 document.addEventListener('keydown', handleKeyboardShortcuts);
 
-                // Supabase 認證狀態監聽
+                // Supabase 認證狀態監聽 - 修復重複觸發
                 if (supabase && !authInitialized) {
                     authInitialized = true;
                     let lastEvent = null;
-                    let isProcessingAuth = false; // 防止重複處理
+                    let lastEventTime = 0;
+                    let isProcessingAuth = false;
+                    
+                    console.log('🔗 設置Supabase認證監聽器...');
                     
                     supabase.auth.onAuthStateChange(async (event, session) => {
-                        // 防止重複的事件處理
-                        if (event === lastEvent && event === 'SIGNED_IN') {
-                            console.log('跳過重複的認證事件:', event);
+                        const currentTime = Date.now();
+                        
+                        // 防止重複事件（1秒內的重複事件）
+                        if (event === lastEvent && (currentTime - lastEventTime) < 1000) {
+                            console.log(`⏭️ 跳過重複認證事件: ${event}`);
                             return;
                         }
                         
+                        // 防止處理中的重複調用
                         if (isProcessingAuth) {
-                            console.log('正在處理認證事件，跳過:', event);
+                            console.log(`🔄 認證處理中，跳過: ${event}`);
                             return;
                         }
                         
                         lastEvent = event;
+                        lastEventTime = currentTime;
                         isProcessingAuth = true;
-                        console.log('認證狀態變化:', event);
+                        
+                        console.log(`🔐 認證狀態變化: ${event}`);
                         
                         try {
                             if (event === 'SIGNED_IN' && session) {
                                 currentUser = session.user;
+                                console.log(`👤 用戶登入: ${currentUser.user_metadata?.full_name || currentUser.email}`);
                                 updateAuthInterface(true);
                                 
                                 // 檢查用戶是否已設置Steam ID
                                 const hasExistingSteamId = await checkUserSteamId(currentUser.id);
                                 if (!hasExistingSteamId) {
-                                    // 顯示Steam連結輸入彈窗
+                                    console.log('🎮 用戶未設置Steam ID，顯示連結彈窗');
                                     showSteamLinkModal();
                                 } else {
-                                    await loadUsers(); // 只在這裡載入一次
+                                    console.log('✅ 用戶已有Steam ID，載入用戶列表');
+                                    await loadUsers();
                                     showNotification('歡迎回來！', 'success');
                                 }
                             } else if (event === 'SIGNED_OUT') {
+                                console.log('👋 用戶登出');
                                 currentUser = null;
                                 updateAuthInterface(false);
                                 selectedUsers = [];
                                 failedUsers = [];
                                 gameDataCache.clear();
                                 await loadUsers(); // 重置為共享帳號模式
+                            } else if (event === 'TOKEN_REFRESHED') {
+                                console.log('🔄 Token已刷新');
+                                // Token刷新不需要特殊處理
+                            } else {
+                                console.log(`ℹ️ 其他認證事件: ${event}`);
                             }
                         } catch (error) {
-                            console.error('處理認證狀態變化時發生錯誤:', error);
+                            console.error('❌ 處理認證狀態變化時發生錯誤:', error);
                             ErrorLogger.log(new AppError('認證狀態處理失敗', 'auth', error));
                         } finally {
                             isProcessingAuth = false;
@@ -818,8 +855,9 @@
                     });
                 }
 
-                console.log('事件監聽器設置完成');
+                console.log('✅ 事件監聽器設置完成');
             } catch (error) {
+                console.error('❌ 設置事件監聽器失敗:', error);
                 ErrorLogger.log(new AppError('設置事件監聽器失敗', 'initialization', error));
             }
         }
@@ -1151,6 +1189,8 @@
 
         // 添加用戶到本地列表（改進去重邏輯）
         function addUserToLocalList(userData) {
+            console.log('➕ 添加用戶到本地列表:', userData.name);
+            
             const userForList = {
                 id: userData.steam_id || userData.id,
                 name: userData.username || userData.name,
@@ -1182,15 +1222,14 @@
                     steamProfileUrl: userForList.steamProfileUrl || existing.steamProfileUrl,
                     avatar: userForList.avatar || existing.avatar
                 };
-                console.log('已更新本地用戶:', allUsers[existingIndex]);
+                console.log('✏️ 已更新本地用戶:', allUsers[existingIndex].name);
             } else {
                 // 不存在才添加
                 allUsers.push(userForList);
-                console.log('已添加新用戶到本地列表:', userForList);
+                console.log('✅ 已添加新用戶到本地列表:', userForList.name);
             }
             
-            // 添加後進行一次去重檢查
-            allUsers = removeDuplicateUsers(allUsers);
+            // 不再在這裡調用removeDuplicateUsers，由loadUsers統一處理
         }
         function showSteamTestModal() {
             const modal = document.createElement('div');
@@ -1388,44 +1427,113 @@
         // 登出處理
         async function handleLogout() {
             try {
-                if (!supabase) return;
+                console.log('開始登出處理...');
+                
+                if (!supabase) {
+                    console.error('Supabase 未初始化');
+                    showNotification('登出失敗：服務未準備就緒', 'error');
+                    return;
+                }
+
+                // 顯示載入狀態
+                const logoutBtn = elements.logoutBtn;
+                if (logoutBtn) {
+                    logoutBtn.disabled = true;
+                    logoutBtn.textContent = '登出中...';
+                }
 
                 const { error } = await supabase.auth.signOut();
+                
                 if (error) {
+                    console.error('Supabase 登出錯誤:', error);
                     throw new AppError('登出失敗', 'auth', error);
                 } else {
+                    console.log('登出成功');
                     showNotification('已成功登出', 'success');
                 }
             } catch (error) {
+                console.error('登出處理失敗:', error);
                 ErrorLogger.log(error);
+                showNotification(`登出失敗: ${error.message}`, 'error');
+                
+                // 恢復按鈕狀態
+                const logoutBtn = elements.logoutBtn;
+                if (logoutBtn) {
+                    logoutBtn.disabled = false;
+                    logoutBtn.textContent = '登出';
+                }
             }
         }
 
         // 更新認證界面
         function updateAuthInterface(isLoggedIn) {
             try {
+                console.log(`🔄 更新認證界面: ${isLoggedIn ? '已登入' : '未登入'}`);
+                
                 if (isLoggedIn && currentUser) {
-                    if (elements.loginBtn) elements.loginBtn.classList.add('hidden');
-                    if (elements.logoutBtn) elements.logoutBtn.classList.remove('hidden');
+                    // 已登入狀態
+                    if (elements.loginBtn) {
+                        elements.loginBtn.classList.add('hidden');
+                        console.log('✅ 隱藏登入按鈕');
+                    }
+                    
+                    if (elements.logoutBtn) {
+                        elements.logoutBtn.classList.remove('hidden');
+                        elements.logoutBtn.disabled = false;
+                        elements.logoutBtn.textContent = '登出';
+                        console.log('✅ 顯示登出按鈕');
+                    } else {
+                        console.warn('❌ 找不到登出按鈕元素');
+                    }
+                    
                     if (elements.userInfo) {
                         elements.userInfo.classList.remove('hidden');
                         elements.userInfo.classList.add('flex');
                     }
+                    
                     if (elements.userAvatar) {
                         elements.userAvatar.src = currentUser.user_metadata?.avatar_url || 'https://ui-avatars.com/api/?name=User';
                     }
+                    
                     if (elements.userName) {
                         elements.userName.textContent = currentUser.user_metadata?.full_name || currentUser.email || 'User';
                     }
+                    
+                    console.log(`👤 用戶界面已更新: ${currentUser.user_metadata?.full_name || currentUser.email}`);
                 } else {
-                    if (elements.loginBtn) elements.loginBtn.classList.remove('hidden');
-                    if (elements.logoutBtn) elements.logoutBtn.classList.add('hidden');
+                    // 未登入狀態
+                    if (elements.loginBtn) {
+                        elements.loginBtn.classList.remove('hidden');
+                        console.log('✅ 顯示登入按鈕');
+                    }
+                    
+                    if (elements.logoutBtn) {
+                        elements.logoutBtn.classList.add('hidden');
+                        elements.logoutBtn.disabled = false;
+                        elements.logoutBtn.textContent = '登出';
+                        console.log('✅ 隱藏登出按鈕');
+                    }
+                    
                     if (elements.userInfo) {
                         elements.userInfo.classList.add('hidden');
                         elements.userInfo.classList.remove('flex');
                     }
+                    
+                    console.log('👋 用戶界面已重置為未登入狀態');
                 }
+                
+                // 同時更新管理按鈕的顯示
+                const manageSteamBtn = document.getElementById('manageSteamBtn');
+                if (manageSteamBtn) {
+                    if (isLoggedIn) {
+                        manageSteamBtn.classList.remove('hidden');
+                    } else {
+                        manageSteamBtn.classList.add('hidden');
+                    }
+                }
+                
             } catch (error) {
+                console.error('❌ 更新認證界面失敗:', error);
                 ErrorLogger.log(new AppError('更新認證界面失敗', 'ui', error));
             }
         }
@@ -1433,6 +1541,8 @@
         // 載入用戶
         async function loadUsers() {
             try {
+                console.log('📋 開始載入用戶...');
+                
                 // 重置共享帳號的遊戲數量
                 SHARED_ACCOUNTS.forEach(account => {
                     account.gameCount = 0;
@@ -1440,6 +1550,7 @@
                 
                 // 重新初始化用戶列表，只包含共享帳號
                 allUsers = [...SHARED_ACCOUNTS];
+                console.log(`🔧 初始化用戶列表，共享帳號數: ${SHARED_ACCOUNTS.length}`);
                 
                 if (currentUser && supabase) {
                     try {
@@ -1452,7 +1563,7 @@
                         
                         if (error) {
                             if (error.code === '42501' || error.message.includes('RLS')) {
-                                console.warn('RLS政策限制，僅顯示共享帳號');
+                                console.warn('⚠️ RLS政策限制，僅顯示共享帳號');
                                 updateSystemStatus('database', 'warning');
                                 
                                 // 如果當前用戶有Steam ID但不在資料庫中，添加到本地
@@ -1466,33 +1577,43 @@
                                         discordId: currentUser.id,
                                         isCurrentUser: true
                                     };
+                                    console.log('➕ 添加當前用戶到本地列表');
                                     addUserToLocalList(currentUserData);
                                 }
                             } else {
                                 throw error;
                             }
                         } else if (users && users.length > 0) {
-                            console.log(`從資料庫載入 ${users.length} 個Discord用戶`);
+                            console.log(`📊 從資料庫載入 ${users.length} 個Discord用戶`);
                             
-                            // 去重：使用 Map 來確保每個 steam_id 只出現一次
+                            // 過濾有效用戶並去重
+                            const validUsers = users.filter(user => 
+                                user.steam_id && user.steam_id.trim() !== ''
+                            );
+                            
+                            console.log(`✅ 有效用戶數: ${validUsers.length}`);
+                            
+                            // 使用 Map 來確保每個 steam_id 只出現一次
                             const userMap = new Map();
                             
-                            users.forEach(user => {
-                                if (user.steam_id && user.steam_id.trim() !== '') {
-                                    const mappedUser = {
-                                        id: user.steam_id,
-                                        name: user.username,
-                                        avatar: user.avatar_url,
-                                        gameCount: user.game_count || 0,
-                                        totalPlaytime: user.total_playtime || 0,
-                                        isShared: false,
-                                        discordId: user.discord_id,
-                                        steamProfileUrl: user.steam_profile_url,
-                                        isCurrentUser: user.discord_id === currentUser.id
-                                    };
-                                    
-                                    // 使用 steam_id 作為 key 來去重
+                            validUsers.forEach(user => {
+                                const mappedUser = {
+                                    id: user.steam_id,
+                                    name: user.username,
+                                    avatar: user.avatar_url,
+                                    gameCount: user.game_count || 0,
+                                    totalPlaytime: user.total_playtime || 0,
+                                    isShared: false,
+                                    discordId: user.discord_id,
+                                    steamProfileUrl: user.steam_profile_url,
+                                    isCurrentUser: user.discord_id === currentUser.id
+                                };
+                                
+                                // 使用 steam_id 作為 key 來去重
+                                if (!userMap.has(user.steam_id)) {
                                     userMap.set(user.steam_id, mappedUser);
+                                } else {
+                                    console.warn(`⚠️ 資料庫中發現重複Steam ID: ${user.steam_id}`);
                                 }
                             });
                             
@@ -1500,21 +1621,27 @@
                             const deduplicatedUsers = Array.from(userMap.values());
                             allUsers = [...allUsers, ...deduplicatedUsers];
                             
-                            console.log(`去重後的Discord用戶數量: ${deduplicatedUsers.length}`);
+                            console.log(`✅ 資料庫去重後的Discord用戶數量: ${deduplicatedUsers.length}`);
                             updateSystemStatus('database', 'connected');
                         }
                     } catch (dbError) {
                         ErrorLogger.log(new AppError('載入Discord群組用戶失敗', 'database', dbError));
-                        console.warn('無法載入Discord群組用戶，僅使用共享帳號');
+                        console.warn('❌ 無法載入Discord群組用戶，僅使用共享帳號');
                         updateSystemStatus('database', 'error');
                     }
                 }
                 
-                // 最終去重檢查：確保 allUsers 中沒有重複的用戶
+                // 最終去重檢查（只執行一次）
+                const beforeFinalCount = allUsers.length;
                 allUsers = removeDuplicateUsers(allUsers);
+                const afterFinalCount = allUsers.length;
+                
+                if (beforeFinalCount !== afterFinalCount) {
+                    console.log(`🔄 最終去重: ${beforeFinalCount} -> ${afterFinalCount}`);
+                }
                 
                 updateUserInterface();
-                console.log('用戶載入完成，總用戶數:', allUsers.length);
+                console.log(`✅ 用戶載入完成，總用戶數: ${allUsers.length}`);
                 
                 // 顯示群組統計
                 const discordUsers = allUsers.filter(u => !u.isShared);
@@ -1525,10 +1652,56 @@
             } catch (error) {
                 ErrorLogger.log(new AppError('載入用戶失敗', 'general', error));
                 showNotification('載入用戶資料失敗', 'error');
+                console.error('❌ 載入用戶失敗:', error);
             }
         }
         
-        // 手動清理重複用戶
+        // 強制登出（備用方案）
+        async function forceLogout() {
+            try {
+                console.log('🚨 執行強制登出...');
+                
+                // 清除本地狀態
+                currentUser = null;
+                selectedUsers = [];
+                failedUsers = [];
+                gameDataCache.clear();
+                ErrorLogger.clear();
+                
+                // 強制更新界面
+                updateAuthInterface(false);
+                
+                // 重置為共享帳號模式
+                await loadUsers();
+                
+                // 如果Supabase可用，嘗試執行登出
+                if (supabase) {
+                    try {
+                        await supabase.auth.signOut();
+                        console.log('✅ Supabase 登出成功');
+                    } catch (error) {
+                        console.warn('⚠️ Supabase 登出失敗，但本地狀態已清除:', error);
+                    }
+                }
+                
+                // 清除可能的session storage
+                try {
+                    if (typeof Storage !== 'undefined') {
+                        sessionStorage.clear();
+                        localStorage.removeItem('supabase.auth.token');
+                    }
+                } catch (error) {
+                    console.warn('清除本地存儲失敗:', error);
+                }
+                
+                showNotification('已強制登出並重置狀態', 'success');
+                console.log('✅ 強制登出完成');
+                
+            } catch (error) {
+                console.error('❌ 強制登出失敗:', error);
+                showNotification('強制登出時發生錯誤', 'error');
+            }
+        }
         function cleanDuplicateUsers() {
             const originalCount = allUsers.length;
             allUsers = removeDuplicateUsers(allUsers);
